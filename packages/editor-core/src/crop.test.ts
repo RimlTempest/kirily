@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { imagePoint } from '@kirily/contract/geometry'
-import { ASPECT_PRESETS, clampCrop, cropFromDrag, resizeCrop } from './crop.ts'
+import { ASPECT_PRESETS, clampCrop, cropFromDrag, fullCrop, resizeCrop } from './crop.ts'
 
 const image = { width: 400, height: 300 }
 
@@ -98,5 +98,16 @@ describe('ASPECT_PRESETS', () => {
 
   test('free crop has no ratio', () => {
     expect(ASPECT_PRESETS[0]?.ratio).toBeNull()
+  })
+})
+
+describe('fullCrop', () => {
+  test('covers the whole image', () => {
+    expect(fullCrop({ width: 640, height: 480 })).toEqual({
+      x: 0,
+      y: 0,
+      width: 640,
+      height: 480,
+    })
   })
 })

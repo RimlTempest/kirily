@@ -142,7 +142,7 @@ PC とモバイルの両方で通ります。
 バケツの許容差は RGB ではなく **OKLab** で測ります — 背景と肌が RGB で
 9.4 しか離れていない画像でも、被写体を飲まずに背景だけを取れます。
 
-テスト: TypeScript 233 / Rust 29 / E2E 38（PC + モバイル、+ WebGPU 段 19）。
+テスト: TypeScript 234 / Rust 29 / E2E 38（PC + モバイル、+ WebGPU 段 19）。
 
 進捗と残りは [docs/roadmap.md](docs/roadmap.md)。
 
