@@ -2,10 +2,12 @@
   import { onMount } from 'svelte'
   import { userMessage } from '@kirily/contract/error'
   import { EditorTool, isBucket, modeOf } from '@kirily/editor-core/state'
-  import type { ImagePoint } from '@kirily/contract/geometry'
+  import type { ImagePoint, ScreenPoint } from '@kirily/contract/geometry'
+  import { screenPoint } from '@kirily/contract/geometry'
   import { DEFAULT_BUCKET } from '@kirily/contract/mask'
   import Dropzone from '$lib/components/upload/Dropzone.svelte'
   import EditorCanvas from '$lib/components/editor/EditorCanvas.svelte'
+  import ZoomControls from '$lib/components/editor/ZoomControls.svelte'
   import Toolbar from '$lib/components/editor/Toolbar.svelte'
   import { createEditorStore } from '$lib/editor/editor-store.svelte.ts'
   import { ExportFormat } from '$lib/editor/export.ts'
@@ -66,6 +68,18 @@
     if (mode !== null) store.bucketFill(at, mode)
   }
 
+  /** The canvas' own size, so zoom presets can aim at its centre. */
+  let canvasSize = $state({ width: 0, height: 0 })
+  const centre = (): ScreenPoint => screenPoint(canvasSize.width / 2, canvasSize.height / 2)
+
+  const onResize = (size: { width: number; height: number }): void => {
+    const first = canvasSize.width === 0
+    canvasSize = size
+    // The starting view shows the whole image; later resizes must not yank
+    // the user's zoom away from them.
+    if (first) store.fit(size)
+  }
+
   const onKeydown = (event: KeyboardEvent): void => {
     const meta = event.metaKey || event.ctrlKey
     if (meta && event.key.toLowerCase() === 'z') {
@@ -75,6 +89,21 @@
     }
     if (event.key === '[') store.setBrushSize((store.state?.brush.size ?? 32) - 4)
     if (event.key === ']') store.setBrushSize((store.state?.brush.size ?? 32) + 4)
+
+    // The shortcuts every editor has. Without them, zooming means reaching for
+    // the toolbar on every correction.
+    if (meta && (event.key === '+' || event.key === '=')) {
+      event.preventDefault()
+      store.setZoom((store.viewport.scale ?? 1) * 2, centre())
+    }
+    if (meta && event.key === '-') {
+      event.preventDefault()
+      store.setZoom((store.viewport.scale ?? 1) / 2, centre())
+    }
+    if (meta && event.key === '0') {
+      event.preventDefault()
+      store.fit(canvasSize)
+    }
   }
 </script>
 
@@ -105,18 +134,31 @@
     </section>
   {:else}
     <div class="flex flex-1 flex-col gap-3 md:flex-row-reverse">
-      <section class="min-h-[50vh] flex-1">
+      <section class="relative min-h-[50vh] flex-1">
         <EditorCanvas
+          image={{ ...store.image.source, rgba: store.image.rgba }}
           preview={store.image.preview}
-          mask={store.previewMask}
-          version={store.previewVersion}
+          mask={store.mask}
+          version={store.maskVersion}
+          viewport={store.viewport}
           {painting}
           {filling}
           brushSize={store.state.brush.size}
-          previewScale={store.image.preview.width / store.image.source.width}
           onstroke={onStroke}
           onfill={onFill}
+          onzoom={(anchor, scale) => store.zoomAt(anchor, scale)}
+          onpan={(dx, dy) => store.pan(dx, dy)}
+          onresize={onResize}
         />
+        <div class="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
+          <div class="pointer-events-auto">
+            <ZoomControls
+              scale={store.viewport.scale}
+              onzoom={(scale) => store.setZoom(scale, centre())}
+              onfit={() => store.fit(canvasSize)}
+            />
+          </div>
+        </div>
       </section>
 
       <div class="md:w-56">

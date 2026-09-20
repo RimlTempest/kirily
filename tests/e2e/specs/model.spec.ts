@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { alphaOnImage } from './canvas.ts'
 
 /**
  * The real segmentation models.
@@ -19,29 +20,6 @@ const fixture = fileURLToPath(new URL('../../fixtures/subject-on-white.png', imp
 const paleFixture = fileURLToPath(
   new URL('../../fixtures/pale-subject-on-white.png', import.meta.url),
 )
-
-/**
- * Reads the alpha channel of the composited canvas at points given as
- * fractions of the image, so the same probe works at any preview scale.
- */
-const alphaAt = async (
-  page: Page,
-  points: Readonly<Record<string, readonly [number, number]>>,
-): Promise<Record<string, number>> =>
-  page.evaluate((spots) => {
-    const canvas = document.querySelector('canvas')
-    if (!(canvas instanceof HTMLCanvasElement)) return {}
-    const context = canvas.getContext('2d', { willReadFrequently: true })
-    if (context === null) return {}
-
-    const out: Record<string, number> = {}
-    for (const [name, [fx, fy]] of Object.entries(spots)) {
-      const x = Math.min(canvas.width - 1, Math.round(fx * canvas.width))
-      const y = Math.min(canvas.height - 1, Math.round(fy * canvas.height))
-      out[name] = context.getImageData(x, y, 1, 1).data[3] ?? 0
-    }
-    return out
-  }, points)
 
 const modelsPublished = async (page: Page): Promise<boolean> => {
   const response = await page.request.get('/models/u2netp/manifest.json')
@@ -73,27 +51,15 @@ test.describe('segmentation', () => {
     // placeholder, so the status line is what we wait on.
     await removedByAModel(page)
 
-    const alpha = await page.evaluate(() => {
-      const canvas = document.querySelector('canvas')
-      if (!(canvas instanceof HTMLCanvasElement)) return null
-      const context = canvas.getContext('2d', { willReadFrequently: true })
-      if (context === null) return null
-      return {
-        corner: context.getImageData(1, 1, 1, 1).data[3],
-        centre: context.getImageData(
-          Math.floor(canvas.width / 2),
-          Math.floor(canvas.height / 2),
-          1,
-          1,
-        ).data[3],
-      }
+    const alpha = await alphaOnImage(page, 120, {
+      corner: [0.03, 0.03],
+      centre: [0.5, 0.5],
     })
 
-    expect(alpha).not.toBeNull()
     // The fixture is a red square on white: the corner is background, the
     // centre is the subject.
-    expect(alpha?.corner).toBeLessThan(32)
-    expect(alpha?.centre).toBeGreaterThan(223)
+    expect(alpha['corner']).toBeLessThan(32)
+    expect(alpha['centre']).toBeGreaterThan(223)
   })
 
   test('the exported PNG carries the transparency, at the original size', async ({ page }) => {
@@ -156,7 +122,7 @@ test.describe('segmentation', () => {
 
     await removedByAModel(page)
 
-    const alpha = await alphaAt(page, {
+    const alpha = await alphaOnImage(page, 1254, {
       topLeft: [0.02, 0.02],
       topRight: [0.98, 0.02],
       bottomLeft: [0.02, 0.98],
@@ -194,7 +160,7 @@ test.describe('segmentation', () => {
     await page.getByRole('button', { name: '背景をきりり' }).click()
     await expect(page.getByText('高精度モデル')).toBeVisible({ timeout: 300_000 })
 
-    const alpha = await alphaAt(page, {
+    const alpha = await alphaOnImage(page, 1254, {
       corner: [0.02, 0.02],
       faceCentre: [0.5, 0.72],
       // The collar touches the bottom edge. The small model drops it; the

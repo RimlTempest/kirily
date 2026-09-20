@@ -5,105 +5,154 @@
    * It converts pointer positions into image coordinates and hands them up. It
    * does not know what a mask is, what undo means, or which tool is active
    * beyond whether the gesture paints (IMPLEMENTATION.md §28).
+   *
+   * It draws only what is on screen, sampled through the viewport, so the cost
+   * follows the size of the canvas rather than the size of the image and a
+   * zoomed-in view shows the original pixels.
    */
-  import type { ImagePoint, Viewport } from '@kirily/contract/geometry'
-  import { centred, fitScale, screenPoint, toImagePoint } from '@kirily/contract/geometry'
+  import type { ImagePoint, ScreenPoint, Viewport } from '@kirily/contract/geometry'
+  import { screenPoint, toImagePoint } from '@kirily/contract/geometry'
+  import type { ColorSource } from '@kirily/image-core/viewport'
+  import { renderViewport } from '@kirily/image-core/viewport'
 
   type Props = {
+    /** Full-resolution pixels. */
+    image: { width: number; height: number; rgba: Uint8ClampedArray }
+    /** Downscaled copy, used while zoomed out so shrinking does not alias. */
     preview: { width: number; height: number; rgba: Uint8ClampedArray }
+    /** The composed mask, at the image's resolution. */
     mask: Uint8Array
     /** Changes whenever the mask changes; used to trigger a redraw. */
     version: number
+    viewport: Viewport
     painting: boolean
     /** True when a single click fills a region instead of painting a stroke. */
     filling: boolean
     brushSize: number
     onstroke: (points: readonly ImagePoint[]) => void
     onfill: (at: ImagePoint) => void
-    /** Preview pixels per original-image pixel. */
-    previewScale: number
+    onzoom: (anchor: ScreenPoint, scale: number) => void
+    onpan: (dx: number, dy: number) => void
+    onresize: (size: { width: number; height: number }) => void
   }
 
   const {
+    image,
     preview,
     mask,
     version,
+    viewport,
     painting,
     filling,
     brushSize,
     onstroke,
     onfill,
-    previewScale,
+    onzoom,
+    onpan,
+    onresize,
   }: Props = $props()
 
   let canvas: HTMLCanvasElement | null = $state(null)
   let frame: HTMLDivElement | null = $state(null)
-  let viewport = $state<Viewport>({ scale: 1, offsetX: 0, offsetY: 0 })
+  let size = $state({ width: 0, height: 0 })
+
   let stroke: ImagePoint[] = []
   let strokePointer: number | null = null
+  let panPointer: number | null = null
+  let lastPan: { x: number; y: number } | null = null
+  /** Pointer id → last position, so two fingers can pinch. */
+  const touches = new Map<number, { x: number; y: number }>()
+  let pinchDistance = 0
 
-  /** Composited preview pixels. Allocated once per image, not per frame. */
-  let composited: ImageData | null = null
-
-  const fit = (): void => {
-    if (frame === null) return
-    const box = frame.getBoundingClientRect()
-    if (box.width === 0 || box.height === 0) return
-    const scale = Math.min(1, fitScale(preview, box))
-    viewport = centred(preview, box, scale)
-  }
+  /** Reused across frames: at 1200x800 this is 3.8 MB. */
+  let framebuffer: ImageData | null = null
 
   const draw = (): void => {
-    if (canvas === null) return
+    if (canvas === null || size.width === 0 || size.height === 0) return
     const context = canvas.getContext('2d')
     if (context === null) return
 
-    composited ??= new ImageData(preview.width, preview.height)
-    const pixels = preview.width * preview.height
-    for (let i = 0; i < pixels; i++) {
-      const base = i * 4
-      composited.data[base] = preview.rgba[base] ?? 0
-      composited.data[base + 1] = preview.rgba[base + 1] ?? 0
-      composited.data[base + 2] = preview.rgba[base + 2] ?? 0
-      composited.data[base + 3] = mask[i] ?? 255
+    if (
+      framebuffer === null ||
+      framebuffer.width !== size.width ||
+      framebuffer.height !== size.height
+    ) {
+      framebuffer = new ImageData(size.width, size.height)
     }
-    context.putImageData(composited, 0, 0)
+
+    // Zoomed out, read the preview: it was downscaled by the browser with a
+    // proper filter, so it stands in for a mip level. Zoomed in, read the
+    // original — that is the whole point of zooming in.
+    const previewScale = preview.width / image.width
+    const source: ColorSource = viewport.scale > previewScale ? image : preview
+
+    renderViewport(source, mask, image, viewport, size, framebuffer.data)
+    context.putImageData(framebuffer, 0, 0)
   }
 
   $effect(() => {
-    // Re-read both so the effect re-runs when either the pixels or the mask
-    // change; `version` is the cheap stand-in for diffing 8 MB of mask.
+    // Re-read each input so the effect runs when any of them changes.
     void version
-    void preview
-    composited = null
+    void viewport
+    void size
+    void image
     draw()
   })
 
   $effect(() => {
     if (frame === null) return
-    const observer = new ResizeObserver(fit)
+    const observer = new ResizeObserver((entries) => {
+      const box = entries[0]?.contentRect
+      if (box === undefined || box.width === 0 || box.height === 0) return
+      const next = { width: Math.round(box.width), height: Math.round(box.height) }
+      size = next
+      onresize(next)
+    })
     observer.observe(frame)
-    fit()
     return () => observer.disconnect()
   })
 
-  const pointAt = (event: PointerEvent): ImagePoint | null => {
+  const screenAt = (event: { clientX: number; clientY: number }): ScreenPoint | null => {
     if (canvas === null) return null
     const box = canvas.getBoundingClientRect()
-    const inPreview = toImagePoint(screenPoint(event.clientX - box.left, event.clientY - box.top), {
-      scale: box.width / preview.width,
-      offsetX: 0,
-      offsetY: 0,
-    })
-    // Preview coordinates are not image coordinates: the mask lives at the
-    // original resolution (IMPLEMENTATION.md §11).
-    return { space: 'image', x: inPreview.x / previewScale, y: inPreview.y / previewScale }
+    return screenPoint(event.clientX - box.left, event.clientY - box.top)
+  }
+
+  const pointAt = (event: PointerEvent): ImagePoint | null => {
+    const screen = screenAt(event)
+    return screen === null ? null : toImagePoint(screen, viewport)
+  }
+
+  const onWheel = (event: WheelEvent): void => {
+    event.preventDefault()
+    const anchor = screenAt(event)
+    if (anchor === null) return
+    // Exponential, so each notch feels the same at every zoom level.
+    onzoom(anchor, viewport.scale * Math.exp(-event.deltaY * 0.002))
   }
 
   const onPointerDown = (event: PointerEvent): void => {
-    if (event.button !== 0) return
+    touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    if (touches.size === 2) {
+      // A second finger turns the gesture into a pinch; abandon any stroke it
+      // started, or the first finger would keep painting while zooming.
+      stroke = []
+      strokePointer = null
+      pinchDistance = spread()
+      return
+    }
+
     const point = pointAt(event)
     if (point === null) return
+
+    // Middle button, or space held, or the pan tool: drag the image.
+    if (event.button === 1 || (!painting && !filling)) {
+      panPointer = event.pointerId
+      lastPan = { x: event.clientX, y: event.clientY }
+      canvas?.setPointerCapture(event.pointerId)
+      return
+    }
+    if (event.button !== 0) return
 
     // The bucket acts on press, not on release: it is one click, and waiting
     // for the release would make it feel like a drag that did nothing.
@@ -111,55 +160,104 @@
       onfill(point)
       return
     }
-    if (!painting) return
 
     strokePointer = event.pointerId
     stroke = [point]
     canvas?.setPointerCapture(event.pointerId)
   }
 
+  const spread = (): number => {
+    const [a, b] = [...touches.values()]
+    if (a === undefined || b === undefined) return 0
+    return Math.hypot(a.x - b.x, a.y - b.y)
+  }
+
+  const midpoint = (): ScreenPoint | null => {
+    const [a, b] = [...touches.values()]
+    if (a === undefined || b === undefined) return null
+    return screenAt({ clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 })
+  }
+
   const onPointerMove = (event: PointerEvent): void => {
+    if (touches.has(event.pointerId)) {
+      touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    }
+
+    if (touches.size === 2) {
+      const next = spread()
+      const anchor = midpoint()
+      if (pinchDistance > 0 && next > 0 && anchor !== null) {
+        onzoom(anchor, viewport.scale * (next / pinchDistance))
+      }
+      pinchDistance = next
+      return
+    }
+
+    if (panPointer === event.pointerId && lastPan !== null) {
+      onpan(event.clientX - lastPan.x, event.clientY - lastPan.y)
+      lastPan = { x: event.clientX, y: event.clientY }
+      return
+    }
+
     if (strokePointer !== event.pointerId) return
     const point = pointAt(event)
     if (point !== null) stroke.push(point)
   }
 
-  const endStroke = (event: PointerEvent): void => {
+  const endGesture = (event: PointerEvent): void => {
+    touches.delete(event.pointerId)
+    if (touches.size < 2) pinchDistance = 0
+
+    if (panPointer === event.pointerId) {
+      panPointer = null
+      lastPan = null
+      return
+    }
     if (strokePointer !== event.pointerId) return
+
     strokePointer = null
     if (stroke.length > 0) onstroke(stroke)
     stroke = []
   }
+
+  const cursor = $derived(
+    filling ? 'cell' : painting ? 'crosshair' : panPointer === null ? 'grab' : 'grabbing',
+  )
 </script>
 
+<!--
+  `absolute inset-0`, not `h-full`: the section around it is sized by flex-grow
+  and a min-height, and a percentage height has nothing definite to resolve
+  against — the canvas came out 0x0 on a phone.
+-->
 <div
   bind:this={frame}
-  class="checkerboard relative grid h-full w-full place-items-center overflow-hidden rounded-[var(--radius-panel)]"
+  class="checkerboard absolute inset-0 overflow-hidden rounded-[var(--radius-panel)]"
 >
   <canvas
     bind:this={canvas}
-    width={preview.width}
-    height={preview.height}
-    class="max-h-full max-w-full touch-none"
-    style:width={`${preview.width * viewport.scale}px`}
-    style:height={`${preview.height * viewport.scale}px`}
-    style:cursor={filling ? 'cell' : painting ? 'crosshair' : 'default'}
+    width={size.width}
+    height={size.height}
+    class="absolute inset-0 h-full w-full touch-none"
+    style:cursor
     aria-label="編集中の画像"
+    onwheel={onWheel}
     onpointerdown={onPointerDown}
     onpointermove={onPointerMove}
-    onpointerup={endStroke}
-    onpointercancel={endStroke}
+    onpointerup={endGesture}
+    onpointercancel={endGesture}
+    onpointerleave={endGesture}
   ></canvas>
 
   {#if painting}
     <p
-      class="pointer-events-none absolute bottom-3 rounded-full bg-surface-raised/90 px-3 py-1 text-xs text-ink-muted"
+      class="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-surface-raised/90 px-3 py-1 text-xs text-ink-muted"
     >
       ブラシ {Math.round(brushSize)}px
     </p>
   {:else if filling}
     <p
-      class="pointer-events-none absolute bottom-3 rounded-full bg-surface-raised/90 px-3 py-1 text-xs text-ink-muted"
+      class="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-surface-raised/90 px-3 py-1 text-xs text-ink-muted"
     >
       クリックした色の範囲をまとめて
     </p>

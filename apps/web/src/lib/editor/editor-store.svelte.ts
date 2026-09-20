@@ -9,7 +9,8 @@
 import type { BackgroundRemovalProvider } from '@kirily/ai/provider'
 import type { KirilyError } from '@kirily/contract/error'
 import { exportFileName } from '@kirily/contract/image'
-import type { ImagePoint } from '@kirily/contract/geometry'
+import type { ImagePoint, ScreenPoint, Viewport } from '@kirily/contract/geometry'
+import { fitViewport, panBy, zoomAt } from '@kirily/contract/geometry'
 import type { BrushMode, BucketSettings } from '@kirily/contract/mask'
 import type { EditorState, EditorStatus } from '@kirily/editor-core/state'
 import {
@@ -21,10 +22,11 @@ import {
   withBrush,
   withBucket,
   withStatus,
+  withViewport,
 } from '@kirily/editor-core/state'
 import { canRedo, canUndo } from '@kirily/editor-core/history'
 import { resample } from '@kirily/editor-core/commands'
-import { composeMask, resampleMask } from '@kirily/image-core/mask'
+import { composeMask } from '@kirily/image-core/mask'
 import { WHITE } from '@kirily/image-core/composite'
 import { budgetFor } from '@kirily/image-core/preview'
 import type { ImageEngine } from '@kirily/wasm'
@@ -56,15 +58,14 @@ export const createEditorStore = (
   let providerId = $state('')
   let engine: ImageEngine | null = null
 
-  /** Composed mask at original resolution. Reused; never reallocated per edit. */
-  let fullMask: Uint8Array = new Uint8Array(0)
   /**
-   * The same mask at preview resolution, for the canvas. Raw and mutated in
-   * place — `previewVersion` is what the renderer watches, because comparing
-   * several megabytes of mask on every edit is the thing to avoid.
+   * Composed mask at original resolution. Reused; never reallocated per edit.
+   * Raw and mutated in place — `maskVersion` is what the renderer watches,
+   * because comparing several megabytes of mask on every edit is the thing to
+   * avoid.
    */
-  let previewMask = $state.raw(new Uint8Array(0))
-  let previewVersion = $state(0)
+  let fullMask = $state.raw(new Uint8Array(0))
+  let maskVersion = $state(0)
 
   const engineOrLoad = async (): Promise<ImageEngine> => {
     engine ??= await loadImageEngine()
@@ -72,10 +73,9 @@ export const createEditorStore = (
   }
 
   const recompose = (): void => {
-    if (editor === null || decoded === null) return
+    if (editor === null) return
     composeMask(editor.mask, fullMask)
-    resampleMask(fullMask, editor.mask, decoded.preview, previewMask)
-    previewVersion += 1
+    maskVersion += 1
   }
 
   const fail = (error: KirilyError): void => {
@@ -90,12 +90,16 @@ export const createEditorStore = (
     get state(): EditorState | null {
       return editor
     },
-    get previewMask(): Uint8Array {
-      return previewMask
+    /** The composed mask, at the original resolution. */
+    get mask(): Uint8Array {
+      return fullMask
     },
     /** Bumped on every mask change so the canvas knows to redraw. */
-    get previewVersion(): number {
-      return previewVersion
+    get maskVersion(): number {
+      return maskVersion
+    },
+    get viewport(): Viewport {
+      return editor?.viewport ?? { scale: 1, offsetX: 0, offsetY: 0 }
     },
     get status(): EditorStatus {
       return editor?.status ?? { kind: 'idle' }
@@ -133,7 +137,6 @@ export const createEditorStore = (
       decoded = result.value
       editor = createEditorState(result.value.source)
       fullMask = new Uint8Array(result.value.source.width * result.value.source.height)
-      previewMask = new Uint8Array(result.value.preview.width * result.value.preview.height)
       recompose()
     },
 
@@ -201,6 +204,29 @@ export const createEditorStore = (
       editor = withBucket(editor, bucket)
     },
 
+    /** Zooms around a point on screen, keeping what is under it in place. */
+    zoomAt: (anchor: ScreenPoint, scale: number): void => {
+      if (editor === null) return
+      editor = withViewport(editor, zoomAt(editor.viewport, anchor, scale))
+    },
+
+    pan: (dx: number, dy: number): void => {
+      if (editor === null) return
+      editor = withViewport(editor, panBy(editor.viewport, dx, dy))
+    },
+
+    /** Shows the whole image, centred. Also the starting view. */
+    fit: (container: { readonly width: number; readonly height: number }): void => {
+      if (editor === null) return
+      editor = withViewport(editor, fitViewport(editor.source, container))
+    },
+
+    /** Jumps to a preset zoom, keeping the centre of the view still. */
+    setZoom: (scale: number, centre: ScreenPoint): void => {
+      if (editor === null) return
+      editor = withViewport(editor, zoomAt(editor.viewport, centre, scale))
+    },
+
     setBrushSize: (size: number): void => {
       if (editor === null) return
       editor = withBrush(editor, { ...editor.brush, size: Math.max(1, Math.min(400, size)) })
@@ -248,7 +274,6 @@ export const createEditorStore = (
       editor = null
       lastError = null
       fullMask = new Uint8Array(0)
-      previewMask = new Uint8Array(0)
     },
 
     get lastError(): KirilyError | null {

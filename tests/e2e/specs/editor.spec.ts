@@ -2,6 +2,23 @@ import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { alphaOnImage, imageRect, pointOnImage } from './canvas.ts'
+
+/** Alpha of the composited canvas directly under a page-space point. */
+const alphaUnderPointer = async (page: Page, point: { x: number; y: number }): Promise<number> => {
+  const box = await page.getByLabel('編集中の画像').boundingBox()
+  if (box === null) return 0
+  return page.evaluate(
+    ({ x, y }) => {
+      const canvas = document.querySelector('canvas')
+      if (!(canvas instanceof HTMLCanvasElement)) return 0
+      const context = canvas.getContext('2d', { willReadFrequently: true })
+      if (context === null) return 0
+      return context.getImageData(Math.round(x), Math.round(y), 1, 1).data[3] ?? 0
+    },
+    { x: point.x - box.x, y: point.y - box.y },
+  )
+}
 
 /**
  * The vertical slice, end to end (kirily-design.md §31): open an image, remove
@@ -59,14 +76,14 @@ test('background removal makes undo available, and undo takes it back', async ({
 
 test('a brush stroke is one undo step', async ({ page }) => {
   await openImage(page)
-  const canvas = page.getByLabel('編集中の画像')
-  const box = await canvas.boundingBox()
-  expect(box).not.toBeNull()
-  if (box === null) return
+  const rect = await imageRect(page, 120)
+  expect(rect).not.toBeNull()
+  if (rect === null) return
 
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  const start = pointOnImage(rect, 0.5, 0.5)
+  await page.mouse.move(start.x, start.y)
   await page.mouse.down()
-  await page.mouse.move(box.x + box.width / 2 + 20, box.y + box.height / 2, { steps: 10 })
+  await page.mouse.move(start.x + rect.width * 0.15, start.y, { steps: 10 })
   await page.mouse.up()
 
   await expect(page.getByRole('button', { name: '取り消す' })).toBeEnabled()
@@ -82,50 +99,107 @@ test('the bucket takes a whole region in one click', async ({ page }) => {
   // The tolerance slider replaces the brush width one for the bucket.
   await expect(page.getByLabel('色の幅')).toBeVisible()
 
-  const canvas = page.getByLabel('編集中の画像')
-  const box = await canvas.boundingBox()
-  expect(box).not.toBeNull()
-  if (box === null) return
+  const rect = await imageRect(page, 120)
+  expect(rect).not.toBeNull()
+  if (rect === null) return
 
-  // The fixture is a red square on white; a corner is background.
-  await page.mouse.click(box.x + 4, box.y + 4)
+  // The fixture is a red square on white; near a corner is background.
+  const corner = pointOnImage(rect, 0.05, 0.05)
+  await page.mouse.click(corner.x, corner.y)
 
   await expect(undo).toBeEnabled()
 
-  const alpha = await page.evaluate(() => {
-    const element = document.querySelector('canvas')
-    if (!(element instanceof HTMLCanvasElement)) return null
-    const context = element.getContext('2d', { willReadFrequently: true })
-    if (context === null) return null
-    return {
-      corner: context.getImageData(2, 2, 1, 1).data[3],
-      centre: context.getImageData(
-        Math.floor(element.width / 2),
-        Math.floor(element.height / 2),
-        1,
-        1,
-      ).data[3],
-    }
+  const alpha = await alphaOnImage(page, 120, {
+    corner: [0.05, 0.05],
+    centre: [0.5, 0.5],
   })
 
   // One click removed the whole background and left the subject alone.
-  expect(alpha?.corner).toBeLessThan(32)
-  expect(alpha?.centre).toBeGreaterThan(223)
+  expect(alpha['corner']).toBeLessThan(32)
+  expect(alpha['centre']).toBeGreaterThan(223)
 })
 
 test('a bucket fill is a single undo step', async ({ page }) => {
   await openImage(page)
   await page.getByRole('button', { name: 'まとめて消す' }).click()
 
-  const canvas = page.getByLabel('編集中の画像')
-  const box = await canvas.boundingBox()
-  if (box === null) return
-  await page.mouse.click(box.x + 4, box.y + 4)
+  const rect = await imageRect(page, 120)
+  if (rect === null) return
+  const corner = pointOnImage(rect, 0.05, 0.05)
+  await page.mouse.click(corner.x, corner.y)
 
   const undo = page.getByRole('button', { name: '取り消す' })
   await expect(undo).toBeEnabled()
   await undo.click()
   await expect(undo).toBeDisabled()
+})
+
+test('zoom presets change the level, and 全体 brings it back', async ({ page }) => {
+  await openImage(page)
+
+  // The fixture is 120px in a much larger frame, so fitting it stops at 100%.
+  await expect(page.getByLabel('現在の倍率')).toHaveText('100%')
+
+  await page.getByRole('button', { name: '200%', exact: true }).click()
+  await expect(page.getByRole('button', { name: '200%', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+
+  await page.getByRole('button', { name: '全体' }).click()
+  await expect(page.getByRole('button', { name: '100%', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+})
+
+test('the wheel zooms around the pointer, not the corner', async ({ page }) => {
+  await openImage(page)
+  const rect = await imageRect(page, 120)
+  expect(rect).not.toBeNull()
+  if (rect === null) return
+
+  // Put the pointer on the subject's top-left corner and zoom in. That corner
+  // has to stay under the pointer, which is what makes a zoom aimable.
+  const anchor = pointOnImage(rect, 0.25, 0.25)
+  await page.mouse.move(anchor.x, anchor.y)
+
+  const before = await alphaUnderPointer(page, anchor)
+  await page.mouse.wheel(0, -600)
+  await expect(page.getByLabel('現在の倍率')).not.toHaveText('100%')
+  const after = await alphaUnderPointer(page, anchor)
+
+  expect(after).toBe(before)
+})
+
+test('painting lands where the pointer is, even when zoomed in', async ({ page }) => {
+  await openImage(page)
+
+  await page.getByRole('button', { name: '200%', exact: true }).click()
+  const rect = await imageRect(page, 120)
+  if (rect === null) return
+
+  // Zoomed to 200%, the image is twice the fitted size and still centred.
+  const box = await page.getByLabel('編集中の画像').boundingBox()
+  if (box === null) return
+  const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+
+  await page.mouse.move(centre.x, centre.y)
+  await page.mouse.down()
+  await page.mouse.move(centre.x + 30, centre.y, { steps: 8 })
+  await page.mouse.up()
+
+  // The stroke removed part of the subject at the centre of the view.
+  const alpha = await page.evaluate(() => {
+    const canvas = document.querySelector('canvas')
+    if (!(canvas instanceof HTMLCanvasElement)) return null
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    if (context === null) return null
+    return context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1)
+      .data[3]
+  })
+
+  expect(alpha).toBeLessThan(128)
 })
 
 test('export produces a PNG named after the source file', async ({ page }) => {

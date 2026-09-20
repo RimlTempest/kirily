@@ -10,7 +10,8 @@
     "./resize": "./src/resize.ts",
     "./guided": "./src/guided.ts",
     "./color": "./src/color.ts",
-    "./flood": "./src/flood.ts"
+    "./flood": "./src/flood.ts",
+    "./viewport": "./src/viewport.ts"
   },
   "scripts": {
     "test": "bun test"

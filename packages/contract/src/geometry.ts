@@ -60,6 +60,57 @@ export const toScreenPoint = (point: ImagePoint, viewport: Viewport): ScreenPoin
     point.y * viewport.scale + viewport.offsetY,
   )
 
+/** The zoom presets the toolbar offers (kirily-design.md §14). */
+export const ZOOM_STEPS: readonly number[] = [0.25, 0.5, 1, 2, 4]
+
+/**
+ * Below this the image is a thumbnail; above it, one image pixel covers a
+ * large block of screen and there is nothing left to see.
+ */
+export const ZOOM_MIN = 0.05
+export const ZOOM_MAX = 32
+
+export const clampZoom = (scale: number): number => {
+  if (!Number.isFinite(scale)) return Number.isNaN(scale) ? 1 : ZOOM_MAX
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, scale))
+}
+
+/**
+ * Zooms while keeping the image point under `anchor` exactly where it is.
+ *
+ * Without this the image slides away from the pointer as you zoom, which is
+ * the difference between a zoom you can aim and one you fight.
+ */
+export const zoomAt = (viewport: Viewport, anchor: ScreenPoint, scale: number): Viewport => {
+  const next = clampZoom(scale)
+  const image = toImagePoint(anchor, viewport)
+  return {
+    scale: next,
+    offsetX: anchor.x - image.x * next,
+    offsetY: anchor.y - image.y * next,
+  }
+}
+
+/** Moves the image by a screen-space delta, one pixel for one. */
+export const panBy = (viewport: Viewport, dx: number, dy: number): Viewport => ({
+  ...viewport,
+  offsetX: viewport.offsetX + dx,
+  offsetY: viewport.offsetY + dy,
+})
+
+/**
+ * Shows the whole image, centred, and never enlarges past 100%: blowing up a
+ * small image to fill the frame suggests detail that is not there.
+ */
+export const fitViewport = (
+  image: { readonly width: number; readonly height: number },
+  container: { readonly width: number; readonly height: number },
+): Viewport => {
+  const usable = container.width > 0 && container.height > 0
+  const scale = usable ? clampZoom(Math.min(1, fitScale(image, container))) : 1
+  return centred(image, container, scale)
+}
+
 /** Scale that fits `image` inside `container` without cropping it. */
 export const fitScale = (
   image: { readonly width: number; readonly height: number },
