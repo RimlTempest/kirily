@@ -1,0 +1,270 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Kirily — ブラウザ内で完結する背景透過パイプライン",
+    "output": "kirily-architecture.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/RimlTempest/kirily",
+      "revision": "af9689fc3c30057b7f8f38da312efd8e43939389"
+    },
+    "views": [
+      {
+        "id": "image-path",
+        "label": "画像の通り道",
+        "focus": ["user", "ui", "store", "engine", "export"],
+        "note": "読み込みから書き出しまで、画像が端末の外へ出ない経路。"
+      },
+      {
+        "id": "ai-path",
+        "label": "AI 推論",
+        "focus": ["store", "worker", "ort", "models"],
+        "note": "推論はメインスレッド外。端末の能力に応じて 3 段から選ぶ。"
+      },
+      {
+        "id": "delivery",
+        "label": "配信",
+        "focus": ["cloud", "ui", "worker"],
+        "note": "Cloudflare が返すのはアプリと重みだけ。画像は登らない。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "利用者の画像",
+      "sublabel": "端末の中だけ",
+      "pos": [60, 250],
+      "size": [150, 60]
+    },
+    {
+      "id": "ui",
+      "type": "frontend",
+      "label": "SvelteKit UI",
+      "sublabel": "Canvas / Pointer",
+      "pos": [320, 250],
+      "size": [170, 64],
+      "sources": [
+        {
+          "path": "apps/web/src/lib/components/editor/EditorCanvas.svelte",
+          "label": "EditorCanvas"
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "type": "frontend",
+      "label": "Editor Store",
+      "sublabel": "Svelte 5 runes",
+      "pos": [610, 250],
+      "size": [170, 64],
+      "sources": [
+        {
+          "path": "apps/web/src/lib/editor/editor-store.svelte.ts"
+        }
+      ]
+    },
+    {
+      "id": "core",
+      "type": "backend",
+      "label": "editor-core",
+      "sublabel": "コマンド / Undo",
+      "pos": [610, 110],
+      "size": [170, 64],
+      "tag": "DOM なし",
+      "sources": [
+        {
+          "path": "packages/editor-core/src/history.ts"
+        }
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "AI Worker",
+      "sublabel": "メインスレッド外",
+      "pos": [900, 250],
+      "size": [170, 64],
+      "sources": [
+        {
+          "path": "apps/web/src/lib/workers/ai.worker.ts"
+        }
+      ]
+    },
+    {
+      "id": "ort",
+      "type": "backend",
+      "label": "ONNX Runtime Web",
+      "sublabel": "WebGPU / WASM",
+      "pos": [900, 390],
+      "size": [190, 64]
+    },
+    {
+      "id": "models",
+      "type": "backend",
+      "label": "セグメンテーション 3 段",
+      "sublabel": "BiRefNet / IS-Net / U²-Netp",
+      "pos": [900, 530],
+      "size": [190, 64],
+      "tag": "端末の能力で選ぶ",
+      "sources": [
+        {
+          "path": "packages/ai/src/local/onnx/plan.ts"
+        }
+      ]
+    },
+    {
+      "id": "engine",
+      "type": "backend",
+      "label": "Image Engine",
+      "sublabel": "Rust / WASM",
+      "pos": [610, 390],
+      "size": [190, 64],
+      "tag": "TS フォールバック",
+      "sources": [
+        {
+          "path": "crates/kirily-raster/src/guided.rs"
+        }
+      ]
+    },
+    {
+      "id": "export",
+      "type": "backend",
+      "label": "書き出し",
+      "sublabel": "元解像度 PNG / WebP / JPEG",
+      "pos": [610, 530],
+      "size": [190, 64],
+      "sources": [
+        {
+          "path": "apps/web/src/lib/editor/export.ts"
+        }
+      ]
+    },
+    {
+      "id": "cloud",
+      "type": "cloud",
+      "label": "Cloudflare Workers",
+      "sublabel": "アプリと重みを配信",
+      "pos": [60, 530],
+      "size": [210, 64]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "ブラウザ内 — 画像はここから出ない",
+      "wraps": ["ui", "store", "core", "worker", "ort", "models", "engine", "export"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "open",
+      "from": "user",
+      "to": "ui",
+      "label": "ドラッグ&ドロップ",
+      "variant": "emphasis",
+      "labelDy": -24
+    },
+    {
+      "id": "decode",
+      "from": "ui",
+      "to": "store",
+      "label": "デコード（元解像度）",
+      "labelDy": -24
+    },
+    {
+      "id": "commands",
+      "from": "store",
+      "to": "core",
+      "label": "コマンド / Undo",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "infer",
+      "from": "store",
+      "to": "worker",
+      "label": "元画像 RGBA → alpha mask",
+      "labelDy": -24
+    },
+    {
+      "id": "runtime",
+      "from": "worker",
+      "to": "ort",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "predict",
+      "from": "ort",
+      "to": "models",
+      "label": "1024² で推論",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "id": "refine",
+      "from": "store",
+      "to": "engine",
+      "label": "guided filter で精緻化",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "compose",
+      "from": "engine",
+      "to": "export",
+      "label": "元解像度で合成",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "id": "app",
+      "from": "cloud",
+      "to": "ui",
+      "label": "アプリ配信",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "left",
+      "via": [
+        [280, 562],
+        [280, 282]
+      ]
+    },
+    {
+      "id": "weights",
+      "from": "cloud",
+      "to": "models",
+      "label": "重み（24 MiB shard + SHA-256）",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "via": [
+        [165, 640],
+        [995, 640]
+      ],
+      "labelDy": 22
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "ブラウザ内で完結",
+      "items": ["画像は端末から出ない", "CSP は connect-src 'self'"]
+    },
+    {
+      "dot": "emerald",
+      "title": "AI",
+      "items": ["端末の能力で 3 段から選ぶ", "重みは SHA-256 で検証してから使う"]
+    },
+    {
+      "dot": "violet",
+      "title": "品質",
+      "items": ["Preview と Export を分ける", "書き出しは常に元解像度"]
+    }
+  ]
+}
