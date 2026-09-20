@@ -8,6 +8,8 @@ target
 packages/wasm/pkg
 # ビルド入力（tools/fetch-models.ts が生成する）
 apps/web/static/models
+# archify の visual-check が残す証跡（再生成できる）
+docs/diagrams/*.visual-check.*
 tests/e2e/test-results
 tests/e2e/playwright-report
 .env
