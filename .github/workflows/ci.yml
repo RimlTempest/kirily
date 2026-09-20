@@ -20,6 +20,7 @@ jobs:
   guard:
     name: 不変条件の検査
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
 
@@ -77,6 +78,7 @@ jobs:
   fmt-lint:
     name: fmt + lint (oxfmt / oxlint / prettier)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
       - uses: jdx/mise-action@v3
@@ -88,6 +90,7 @@ jobs:
   rust:
     name: rust (fmt / clippy / test)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
       - uses: jdx/mise-action@v3
@@ -102,6 +105,7 @@ jobs:
   typecheck-test:
     name: typecheck + test
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
       - uses: jdx/mise-action@v3
@@ -117,6 +121,10 @@ jobs:
   e2e:
     name: e2e (desktop + mobile)
     runs-on: ubuntu-latest
+    # wasm-pack のビルド、284 MiB のモデル取得、ブラウザの用意が入るので長い。
+    # 既定の 6 時間のままハングさせると private リポジトリの Actions 時間を
+    # 丸ごと食うので、上限を置く。固まりやすい step には個別の上限も置いた。
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v5
       - uses: jdx/mise-action@v3
@@ -145,7 +153,13 @@ jobs:
             echo "::error::Browser wasm exceeded 300KB gzip."
             exit 1
           fi
-      - run: bun run e2e:install
+      # `--with-deps` は apt を呼ぶ。フロントエンドを明示しないと
+      # 設定プロンプトで待ち続け、ジョブが固まる。
+      - name: Playwright のブラウザを用意
+        run: bun run e2e:install
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        timeout-minutes: 10
       # ランナーに GPU アダプタが無いので CPU 段（U²-Netp）が走る。
       # WebGPU 段は実機で `bun run e2e:webgpu`（ADR-0007）。
       - run: bun run e2e

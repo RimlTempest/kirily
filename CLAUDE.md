@@ -90,6 +90,12 @@ bun run e2e:webgpu   # WebGPU 段の E2E。実 GPU が要る（CI では回ら�
 `bun run wasm:build && bun run models:fetch` を回す。
 モデルが無くても動くが、背景透過は簡易処理に落ちる。
 
+`apps/web/.svelte-kit/` も生成物で、`apps/web/tsconfig.json` がここを
+extends している。**これが無いと `bun run lint` が `Invalid tsconfig` で落ちる。**
+ルートの `postinstall` が `svelte-kit sync` を走らせるので、
+`bun install` さえすれば揃う。bun はワークスペースの `prepare` を
+実行しないので、ここに置いてある。
+
 ## MCP の使い分け
 
 `.mcp.json` に定義がある。調べものは記憶ではなくこちらを引くこと。

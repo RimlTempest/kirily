@@ -25,6 +25,7 @@
     "e2e": "bun run --filter '@kirily/e2e' test",
     "e2e:install": "bun run --filter '@kirily/e2e' install-browsers",
     "prepare": "lefthook install",
+    "postinstall": "bun run --filter '@kirily/web' sync",
     "clean": "find . -maxdepth 3 -name node_modules -type d -prune -exec rm -rf {} + && bun install",
     "models:fetch": "bun run tools/fetch-models.ts",
     "postbuild": "bun run tools/check-asset-sizes.ts",
