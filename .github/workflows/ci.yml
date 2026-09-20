@@ -164,13 +164,35 @@ jobs:
             echo "::error::Browser wasm exceeded 300KB gzip."
             exit 1
           fi
-      # `--with-deps` は apt を呼ぶ。フロントエンドを明示しないと
-      # 設定プロンプトで待ち続け、ジョブが固まる。
-      - name: Playwright のブラウザを用意
-        run: bun run e2e:install
+      # ブラウザ本体は 165 MiB あり、cdn.playwright.dev が止まると
+      # ダウンロードが 0% のまま進まない（実際に 2 回踏んだ）。
+      # キャッシュして、外したときだけ取りにいく。
+      - name: Playwright のブラウザをキャッシュ
+        id: playwright-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('tests/e2e/package.json') }}
+
+      # apt 側は速く、キャッシュに乗らないので毎回入れる。
+      - name: Playwright の依存パッケージ
+        run: bun run --filter '@kirily/e2e' install-deps
         env:
           DEBIAN_FRONTEND: noninteractive
-        timeout-minutes: 10
+        timeout-minutes: 5
+
+      - name: Playwright のブラウザを取得
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        # CDN の停滞は再試行で抜けることが多い。固まったまま待たない。
+        run: |
+          for attempt in 1 2 3; do
+            echo "attempt $attempt"
+            if timeout 300 bun run e2e:install; then exit 0; fi
+            sleep 15
+          done
+          echo "::error::Playwright browser download failed after 3 attempts."
+          exit 1
+        timeout-minutes: 20
       # ランナーに GPU アダプタが無いので CPU 段（U²-Netp）が走る。
       # WebGPU 段は実機で `bun run e2e:webgpu`（ADR-0007）。
       - run: bun run e2e

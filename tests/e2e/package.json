@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "test": "playwright test",
-    "install-browsers": "playwright install --with-deps chromium",
-    "install-browsers:webkit": "playwright install --with-deps webkit",
-    "report": "playwright show-report"
+    "install-browsers": "playwright install chromium",
+    "install-browsers:webkit": "playwright install webkit",
+    "report": "playwright show-report",
+    "install-deps": "playwright install-deps chromium"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.11.0",

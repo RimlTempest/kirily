@@ -102,6 +102,7 @@ cargo test --workspace   # Rust の Small テスト
 bun run wasm:build   # Rust → packages/wasm/pkg（生成物は git 管理外）
 bun run models:fetch # セグメンテーションモデルを取得して分割配信（git 管理外）
 bun run e2e          # Playwright（desktop + mobile）。初回は e2e:install
+                     # （macOS は apt 不要。install-deps は CI 用）
                      # E2E はビルド出力を配信する。直したら build し直す
 bun run e2e:webgpu   # WebGPU 段の E2E。実 GPU が要る（CI では回らない）
 bun audit            # 依存の既知の脆弱性
