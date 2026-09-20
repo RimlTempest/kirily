@@ -102,7 +102,11 @@ ai.worker.ts ─ detectGpu() ─→ planModels()
     │                     createProviderChain
     │                （ロード失敗も推論失敗も次の段へ）
     ▼
-alpha mask（転送して戻す）→ resampleMask → MaskLayers.base
+alpha mask（元解像度、転送して戻す）
+    ▼
+ImageEngine.refineMask（guided filter、元画像をガイドに）
+    ▼
+MaskLayers.base
 ```
 
 重みは `/models/<id>/manifest.json` + shard。

@@ -15,6 +15,8 @@ import type { Result } from '@kirily/contract/result'
 import { err, ok } from '@kirily/contract/result'
 import type { Rgb } from '@kirily/image-core/composite'
 import * as fallback from '@kirily/image-core/composite'
+import type { RefineOptions } from '@kirily/image-core/guided'
+import { DEFAULT_REFINE, refineMask } from '@kirily/image-core/guided'
 
 type WasmModule = {
   readonly apply_alpha_mask: (
@@ -40,6 +42,16 @@ type WasmModule = {
     b: number,
   ) => void
   readonly feather_mask: (mask: Uint8Array, width: number, height: number, radius: number) => void
+  readonly refine_mask: (
+    rgba: Uint8Array,
+    mask: Uint8Array,
+    width: number,
+    height: number,
+    radius: number,
+    epsilon: number,
+    subsample: number,
+    min_variance: number,
+  ) => void
 }
 
 export type ImageEngine = {
@@ -60,6 +72,16 @@ export type ImageEngine = {
     size: { readonly width: number; readonly height: number },
     rect: Rect,
     out: Uint8ClampedArray,
+  ) => Result<void, KirilyError>
+  /**
+   * Pulls the mask's edges onto the image's. Mutates `mask` in place, at full
+   * resolution, using the original pixels as the guide.
+   */
+  readonly refineMask: (
+    rgba: Uint8ClampedArray,
+    mask: Uint8Array,
+    size: { readonly width: number; readonly height: number },
+    options?: RefineOptions,
   ) => Result<void, KirilyError>
 }
 
@@ -85,6 +107,10 @@ const typescriptEngine: ImageEngine = {
   applyAlphaMask: fallback.applyAlphaMask,
   flattenOnto: fallback.flattenOnto,
   cropRgba: fallback.cropRgba,
+  refineMask: (rgba, mask, size, options = DEFAULT_REFINE) =>
+    wrap(() => {
+      refineMask(rgba, mask, size, options)
+    }),
 }
 
 const wasmEngine = (module: WasmModule): ImageEngine => ({
@@ -105,6 +131,19 @@ const wasmEngine = (module: WasmModule): ImageEngine => ({
   // Cropping is a row-wise memcpy; `Uint8ClampedArray.set` already does that
   // at native speed, and going through WASM would copy the buffer twice.
   cropRgba: fallback.cropRgba,
+  refineMask: (rgba, mask, size, options = DEFAULT_REFINE) =>
+    wrap(() =>
+      module.refine_mask(
+        asBytes(rgba),
+        mask,
+        size.width,
+        size.height,
+        options.radius,
+        options.epsilon,
+        options.subsample,
+        options.minVariance,
+      ),
+    ),
 })
 
 /**
@@ -142,3 +181,4 @@ const isWasmModule = (value: unknown): value is WasmModule =>
   && typeof Reflect.get(value, 'flatten_onto') === 'function'
   && typeof Reflect.get(value, 'decontaminate_edges') === 'function'
   && typeof Reflect.get(value, 'feather_mask') === 'function'
+  && typeof Reflect.get(value, 'refine_mask') === 'function'

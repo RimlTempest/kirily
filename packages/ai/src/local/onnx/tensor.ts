@@ -6,7 +6,7 @@
  * expensive kind of bug to find by staring at output images.
  */
 import { solidifyInterior } from '@kirily/image-core/mask'
-import { resampleRgba } from '@kirily/image-core/resize'
+import { resampleGray, resampleRgba } from '@kirily/image-core/resize'
 import type { ModelSpec } from './model-spec.ts'
 
 export type Size = { readonly width: number; readonly height: number }
@@ -17,6 +17,12 @@ export type Size = { readonly width: number; readonly height: number }
  * Channels end up planar (all R, then all G, then all B), which is what every
  * vision model in this family expects and is not what an image buffer looks
  * like — hence the transpose rather than a straight copy.
+ *
+ * The image is stretched to a square rather than letterboxed. That looks wrong
+ * and is not: these models are trained on square-resized images, and padding
+ * to keep the aspect ratio spends part of the 1024² on blank bars, leaving the
+ * subject fewer pixels. Measured on a 1.5:1 frame, letterboxing dropped IoU
+ * from 0.978 to 0.795 (ADR-0007).
  */
 export const toInputTensor = (
   rgba: Uint8ClampedArray,
@@ -78,41 +84,11 @@ export const toAlphaMask = (
   // the model reasoned about, whatever the user's image size.
   if (spec.solidifyInterior) solidifyInterior(small, { width: size, height: size })
 
-  return resampleMaskTo(small, size, to, out)
-}
-
-const resampleMaskTo = <T extends ArrayBufferLike>(
-  source: Uint8Array,
-  sourceSize: number,
-  to: Size,
-  out: Uint8Array<T>,
-): Uint8Array<T> => {
-  const xRatio = sourceSize / to.width
-  const yRatio = sourceSize / to.height
-
-  for (let y = 0; y < to.height; y++) {
-    const sourceY = Math.min(sourceSize - 1, Math.max(0, (y + 0.5) * yRatio - 0.5))
-    const y0 = Math.floor(sourceY)
-    const y1 = Math.min(sourceSize - 1, y0 + 1)
-    const wy = sourceY - y0
-
-    for (let x = 0; x < to.width; x++) {
-      const sourceX = Math.min(sourceSize - 1, Math.max(0, (x + 0.5) * xRatio - 0.5))
-      const x0 = Math.floor(sourceX)
-      const x1 = Math.min(sourceSize - 1, x0 + 1)
-      const wx = sourceX - x0
-
-      const topLeft = source[y0 * sourceSize + x0] ?? 0
-      const topRight = source[y0 * sourceSize + x1] ?? 0
-      const bottomLeft = source[y1 * sourceSize + x0] ?? 0
-      const bottomRight = source[y1 * sourceSize + x1] ?? 0
-
-      const top = topLeft + (topRight - topLeft) * wx
-      const bottom = bottomLeft + (bottomRight - bottomLeft) * wx
-      out[y * to.width + x] = clampToByte(Math.round(top + (bottom - top) * wy))
-    }
-  }
-  return out
+  // Lanczos, not bilinear. Bilinear reconstructs a diagonal edge as a chain of
+  // straight segments, which is what reads as stair-stepping once the mask is
+  // blown up from 1024² to the user's image; measured, the 50% contour wobbles
+  // about a third less with these taps.
+  return resampleGray(small, { width: size, height: size }, to, out, 'lanczos3')
 }
 
 /**

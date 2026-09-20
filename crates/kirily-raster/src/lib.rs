@@ -6,6 +6,10 @@
 //! `Vec` for every step is how a browser tab runs out of memory
 //! (IMPLEMENTATION.md §24).
 
+mod guided;
+
+pub use guided::{RefineOptions, refine_mask};
+
 use kirily_image::{BufferError, ImageSize, Rect};
 
 /// An opaque colour used where alpha cannot be kept — JPEG export

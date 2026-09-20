@@ -10,7 +10,7 @@
 
 use kirily_image::{BufferError, ImageSize, Rect};
 use kirily_mask::{BrushMode, BrushStamp};
-use kirily_raster::Rgb;
+use kirily_raster::{RefineOptions, Rgb};
 use wasm_bindgen::prelude::*;
 
 /// Installs a panic hook so a Rust panic shows up as a readable JS error
@@ -135,6 +135,35 @@ pub fn flatten_onto(
 ) -> Result<(), JsError> {
     let size = size_of(width, height)?;
     kirily_raster::flatten_onto(rgba, size, Rgb { r, g, b }).map_err(to_js_error)
+}
+
+/// Pulls the mask's edges onto the image's, using the original pixels as a
+/// guide. Run once after segmentation, at full resolution.
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn refine_mask(
+    rgba: &[u8],
+    mask: &mut [u8],
+    width: u32,
+    height: u32,
+    radius: u32,
+    epsilon: f32,
+    subsample: u32,
+    min_variance: f32,
+) -> Result<(), JsError> {
+    let size = size_of(width, height)?;
+    kirily_raster::refine_mask(
+        rgba,
+        mask,
+        size,
+        RefineOptions {
+            radius,
+            epsilon,
+            subsample,
+            min_variance,
+        },
+    )
+    .map_err(to_js_error)
 }
 
 /// Removes the old background's colour cast from semi-transparent edges.

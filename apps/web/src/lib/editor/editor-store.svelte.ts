@@ -25,6 +25,7 @@ import { canRedo, canUndo } from '@kirily/editor-core/history'
 import { resample } from '@kirily/editor-core/commands'
 import { composeMask, resampleMask } from '@kirily/image-core/mask'
 import { WHITE } from '@kirily/image-core/composite'
+import { DEFAULT_REFINE, refineRadiusFor } from '@kirily/image-core/guided'
 import { budgetFor } from '@kirily/image-core/preview'
 import type { ImageEngine } from '@kirily/wasm'
 import { loadImageEngine } from '@kirily/wasm'
@@ -140,17 +141,30 @@ export const createEditorStore = (
       if (!ready.ok) return fail(ready.error)
 
       editor = withStatus(editor, { kind: 'ai-processing' })
-      // Inference runs on the preview, as a model would: the mask is scaled up
-      // to the original resolution afterwards (kirily-design.md §7.2).
+      // The original pixels, not the preview. The preview has already been
+      // shrunk once for the screen; feeding it to the model would resample the
+      // image twice before inference and again on the way back, and each pass
+      // costs detail the model then cannot see (kirily-design.md §7.2).
       const segmented = await provider.removeBackground({
-        width: decoded.preview.width,
-        height: decoded.preview.height,
-        rgba: decoded.preview.rgba,
+        width: decoded.source.width,
+        height: decoded.source.height,
+        rgba: decoded.rgba,
       })
       providerId = provider.info.id
       if (!segmented.ok) return fail(segmented.error)
 
-      const alpha = resampleMask(segmented.value.alpha, decoded.preview, editor.mask)
+      // The mask comes back at the original resolution, but its edges are the
+      // model's edges at the model's resolution — near the subject's outline
+      // rather than on it. One guided-filter pass, with the original pixels as
+      // the guide, pulls them onto the real boundary (ADR-0008).
+      const alpha = segmented.value.alpha
+      const refined = (await engineOrLoad()).refineMask(decoded.rgba, alpha, decoded.source, {
+        ...DEFAULT_REFINE,
+        radius: refineRadiusFor(decoded.source),
+      })
+      // A refinement that fails is not worth losing the mask over.
+      if (!refined.ok) console.warn('[kirily] mask refinement skipped:', refined.error.code)
+
       const next = dispatch(editor, { kind: 'replace-base-mask', alpha })
       if (!next.ok) return fail(next.error)
 

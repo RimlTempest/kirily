@@ -135,25 +135,72 @@ const noDomInCore = {
     },
   },
   create(context) {
-    const isShadowed = (name) => {
-      let scope = context.sourceCode?.getScope?.(context.sourceCode.ast)
-      while (scope) {
-        if (scope.variables?.some((v) => v.name === name && v.defs?.length > 0)) return true
-        scope = scope.upper
+    // A name declared anywhere in the file is not the global, whatever the
+    // scope: `const window = radius * 2 + 1` is a box-blur window, not the DOM.
+    // Collected over the whole file and checked at the end, so the rule does
+    // not depend on a scope API whose shape differs between runtimes.
+    const declared = new Set()
+    const suspects = []
+
+    const declare = (node) => {
+      if (node?.type === 'Identifier') {
+        declared.add(node.name)
+        return
       }
-      return false
+      if (node?.type === 'ObjectPattern') {
+        for (const property of node.properties ?? []) {
+          declare(property.value ?? property.argument)
+        }
+        return
+      }
+      if (node?.type === 'ArrayPattern') {
+        for (const element of node.elements ?? []) declare(element)
+        return
+      }
+      if (node?.type === 'AssignmentPattern') declare(node.left)
+      if (node?.type === 'RestElement') declare(node.argument)
     }
+
+    const declareParams = (node) => {
+      for (const param of node.params ?? []) declare(param)
+      if (node.id) declare(node.id)
+    }
+
     return {
+      VariableDeclarator(node) {
+        declare(node.id)
+      },
+      FunctionDeclaration: declareParams,
+      FunctionExpression: declareParams,
+      ArrowFunctionExpression: declareParams,
+      ImportSpecifier(node) {
+        declare(node.local)
+      },
+      ImportDefaultSpecifier(node) {
+        declare(node.local)
+      },
+      ImportNamespaceSpecifier(node) {
+        declare(node.local)
+      },
+
       Identifier(node) {
         if (!DOM_GLOBALS.has(node.name)) return
         const parent = node.parent
-        // Only flag value references, not `foo.document` / `{ document: 1 }` / type positions.
-        if (parent?.type === 'MemberExpression' && parent.property === node && !parent.computed)
+        // Only flag value references, not `foo.document` / `{ document: 1 }`
+        // / type positions.
+        if (parent?.type === 'MemberExpression' && parent.property === node && !parent.computed) {
           return
+        }
         if (parent?.type === 'Property' && parent.key === node && !parent.computed) return
         if (parent?.type === 'TSTypeReference' || parent?.type === 'TSQualifiedName') return
-        if (isShadowed(node.name)) return
-        context.report({ node, messageId: 'noDom', data: { name: node.name } })
+        suspects.push(node)
+      },
+
+      'Program:exit'() {
+        for (const node of suspects) {
+          if (declared.has(node.name)) continue
+          context.report({ node, messageId: 'noDom', data: { name: node.name } })
+        }
       },
     }
   },

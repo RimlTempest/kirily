@@ -22,6 +22,7 @@ describe('loadImageEngine', () => {
       flatten_onto: noop,
       decontaminate_edges: noop,
       feather_mask: noop,
+      refine_mask: noop,
     }))
     expect(engine.backend).toBe('wasm')
   })
