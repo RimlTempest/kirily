@@ -146,6 +146,8 @@ jobs:
             exit 1
           fi
       - run: bun run e2e:install
+      # ランナーに GPU アダプタが無いので CPU 段（U²-Netp）が走る。
+      # WebGPU 段は実機で `bun run e2e:webgpu`（ADR-0007）。
       - run: bun run e2e
       - uses: actions/upload-artifact@v4
         if: failure()

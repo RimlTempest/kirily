@@ -13,6 +13,14 @@ import { defineConfig, devices } from '@playwright/test'
  */
 const webkit = process.env['KIRILY_E2E_WEBKIT'] === '1'
 
+/**
+ * The WebGPU tiers need a real adapter, which a CI runner does not have — and
+ * headless Chromium hands back `navigator.gpu` with no adapter behind it, so a
+ * silent skip would look like coverage. Opt in with `bun run e2e:webgpu` on a
+ * machine with a GPU.
+ */
+const webgpu = process.env['KIRILY_E2E_WEBGPU'] === '1'
+
 export default defineConfig({
   testDir: './specs',
   fullyParallel: true,
@@ -26,6 +34,17 @@ export default defineConfig({
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile', use: { ...devices['Pixel 7'] } },
+    ...(webgpu
+      ? [
+          {
+            name: 'desktop-webgpu',
+            use: {
+              ...devices['Desktop Chrome'],
+              launchOptions: { args: ['--use-angle=metal', '--enable-unsafe-webgpu'] },
+            },
+          },
+        ]
+      : []),
     ...(webkit ? [{ name: 'mobile-safari', use: { ...devices['iPhone 15'] } }] : []),
   ],
   webServer: {

@@ -36,6 +36,11 @@ test('every control is reachable and operable from the keyboard', async ({ page 
 
   await page.getByRole('button', { name: '背景をきりり' }).focus()
   await page.keyboard.press('Enter')
+  // The wait is on the status line, not a timeout: how long removal takes
+  // depends on which model tier the device runs.
+  await expect(page.getByText(/高精度モデル|軽量モデル|簡易処理/)).toBeVisible({
+    timeout: 300_000,
+  })
   await expect(page.getByRole('button', { name: '取り消す' })).toBeEnabled()
 
   // Cmd/Ctrl+Z is the shortcut every editor has; losing it is a regression.

@@ -13,6 +13,20 @@ import { fileURLToPath } from 'node:url'
 
 const fixture = fileURLToPath(new URL('../../fixtures/subject-on-white.png', import.meta.url))
 
+/**
+ * Waits for background removal to finish.
+ *
+ * How long that takes depends entirely on which tier the device runs: the
+ * small model is a second, the quality one downloads 170 MiB first. Waiting on
+ * the status line rather than a fixed timeout keeps the test honest on both.
+ */
+const removeBackground = async (page: Page): Promise<void> => {
+  await page.getByRole('button', { name: '背景をきりり' }).click()
+  await expect(page.getByText(/高精度モデル|軽量モデル|簡易処理/)).toBeVisible({
+    timeout: 300_000,
+  })
+}
+
 const openImage = async (page: Page): Promise<void> => {
   await page.goto('/')
   await page.getByLabel('編集する画像を選ぶ').setInputFiles(fixture)
@@ -35,7 +49,7 @@ test('background removal makes undo available, and undo takes it back', async ({
   const undo = page.getByRole('button', { name: '取り消す' })
   await expect(undo).toBeDisabled()
 
-  await page.getByRole('button', { name: '背景をきりり' }).click()
+  await removeBackground(page)
   await expect(undo).toBeEnabled()
 
   await undo.click()
@@ -60,7 +74,7 @@ test('a brush stroke is one undo step', async ({ page }) => {
 
 test('export produces a PNG named after the source file', async ({ page }) => {
   await openImage(page)
-  await page.getByRole('button', { name: '背景をきりり' }).click()
+  await removeBackground(page)
 
   const download = page.waitForEvent('download')
   await page.getByRole('button', { name: 'PNG で書き出す' }).click()

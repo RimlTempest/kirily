@@ -149,9 +149,10 @@ Python + onnxruntime の参照実装（rembg と同じ前処理・後処理）�
 
 - BiRefNet の段は `maxStorageBuffersPerShaderStage >= 11` の GPU が要る。
   macOS の開発機では検証できない。Windows / Linux で確認すること
-- WebGPU 経路の E2E はアダプタが要る。ローカルでは
-  `chromium.launch({ args: ['--use-angle=metal', '--enable-unsafe-webgpu'] })`
-  で実 GPU が取れる
+- WebGPU 経路の E2E は `bun run e2e:webgpu`。実 GPU が要るので CI では
+  回らず、既定の E2E は CPU 段（U²-Netp）を検証する。
+  `tests/fixtures/pale-subject-on-white.png` の内部の不透明さを
+  実測座標で見ており、`solidifyInterior` を外すと落ちることを確認済み
 - IS-Net の fp16 版があれば 170 MiB → 85 MiB になる。変換は未実施
 - マッティング（髪の半透明）と色の除染は未配線。
   `decontaminate_edges` は Rust 側に実装済み

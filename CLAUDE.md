@@ -80,6 +80,7 @@ bun run wasm:build   # Rust → packages/wasm/pkg（生成物は git 管理外�
 bun run models:fetch # セグメンテーションモデルを取得して分割配信（git 管理外）
 bun run e2e          # Playwright（desktop + mobile）。初回は e2e:install
                      # E2E はビルド出力を配信する。直したら build し直す
+bun run e2e:webgpu   # WebGPU 段の E2E。実 GPU が要る（CI では回らない）
 ```
 
 コミット前に `bun run check`。lefthook が staged ファイル単位で自動実行する。

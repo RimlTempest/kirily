@@ -27,7 +27,8 @@
     "prepare": "lefthook install",
     "clean": "find . -maxdepth 3 -name node_modules -type d -prune -exec rm -rf {} + && bun install",
     "models:fetch": "bun run tools/fetch-models.ts",
-    "postbuild": "bun run tools/check-asset-sizes.ts"
+    "postbuild": "bun run tools/check-asset-sizes.ts",
+    "e2e:webgpu": "KIRILY_E2E_WEBGPU=1 bun run --filter '@kirily/e2e' test --project=desktop-webgpu"
   },
   "devDependencies": {
     "@types/bun": "1.4.0",
