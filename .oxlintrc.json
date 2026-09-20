@@ -42,6 +42,10 @@
     // ピクセルループでは for ... of / forEach よりインデックス for が速い。
     // 画像処理コードの書き方を lint で縛らない。
     "unicorn/no-array-for-each": "off",
+    // Kirily の await の多くは「順番に待つこと」そのものが目的。
+    // shard の逐次取得（メモリと進捗表示）、プロバイダの段階的降格、
+    // ビルドスクリプトのファイル書き出しは並列化すると壊れる。
+    "eslint/no-await-in-loop": "off",
     "promise/no-return-wrap": "error",
     "promise/param-names": "error",
 
@@ -58,6 +62,10 @@
         "kirily/no-throw-in-domain": "error",
         "kirily/no-dom-in-core": "error"
       }
+    },
+    {
+      "files": ["tools/**/*.ts"],
+      "rules": { "eslint/no-console": "off" }
     },
     {
       "files": ["**/*.test.ts", "**/*.spec.ts", "tests/**"],

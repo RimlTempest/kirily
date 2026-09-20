@@ -44,26 +44,55 @@ description: Kirily の構成と拡張手順。どこに何を置くか迷った
   トップページの約束（[ADR-0004](../../../docs/adr/0004-browser-first.md)）が変わる。
 - `crates/kirily-{image,mask,raster}` は **wasm-bindgen に依存しない。**
   `cargo test` で普通に回せなくなる。
+- **静的アセットを 25 MiB 超にしない。** Cloudflare が受け付けない。
+  大きいものは `tools/shard.ts` で分割する（ADR-0007）。
+  `tools/check-asset-sizes.ts` がビルド後に検査する。
+- **ページから外部ドメインへ接続しない。** CSP は `connect-src 'self'`。
+  モデルの重みもランタイムも自前ドメインから配る。
 
 CI の `guard` ジョブがこれらを検査する。
 
 ## 3. 拡張レシピ
 
-### 本物の AI モデルを入れる
+### セグメンテーションモデルを足す
 
-1. `packages/ai/src/local/<name>-provider.ts` を新規作成し、
-   `BackgroundRemovalProvider` を満たす関数を export する
-2. `initialize` の `onProgress` を必ず呼ぶ（モデルは数十 MB ある。
-   進捗が出ないと「固まった」と思われる）
-3. 推論は **Preview 解像度**で行い、結果の alpha を
-   `resampleMask` で元解像度へ上げる
-4. `apps/web/src/lib/editor/editor-store.svelte.ts` の
-   `createEditorStore()` に渡すプロバイダを差し替える
-5. **エディタのコードは 1 行も変えない。** 変えないと入らないなら、
-   `BackgroundRemovalProvider` の切り方が間違っている
+既存の 3 段は [ADR-0007](../../../docs/adr/0007-segmentation-model.md)。
+ONNX なら**コードは書かない**。データを足すだけで入る。
 
-置き換え対象の `createThresholdProvider` は削除しない。
-WASM も WebGPU もない環境のフォールバックとして残す。
+1. `tools/fetch-models.ts` の `MODELS` に 1 件足す。
+   **`bytes` と `sha256` を必ず固定する**（上流が差し替わると、コードを
+   変えていないのに出力が変わる）。ハッシュは一度落として `shasum -a 256`
+2. `packages/ai/src/local/onnx/model-spec.ts` に `ModelSpec` を足す。
+   `mean` / `std` / `outputActivation` / `rescaleOutput` は
+   **元の実装（rembg など）に合わせる**。勘で埋めると、
+   それらしいが間違ったマスクが出る
+3. `packages/ai/src/local/onnx/plan.ts` の `planModels` に、
+   **どの端末で提示するか**を書く。テストも同じファイルの隣に足す
+4. `apps/web/src/routes/editor/+page.svelte` の `MODEL_LABELS` に
+   表示名を足す
+5. `bun run models:fetch && bun run build` → `bun run e2e`
+
+入力名・出力名・fp16 かどうかは **セッションから読む**。
+同じアーキテクチャでも export によって違う。ハードコードしない。
+
+#### 端末で動くかを先に確かめる
+
+**失敗は 100MB 以上ダウンロードしたあとに起きる。**
+だから `planModels` は能力を先に見る。BiRefNet が Apple GPU で
+動かないのは、デコーダの `Split` が storage buffer を 11 個要求し、
+Apple GPU の上限が 10 だから（ADR-0007）。
+
+`navigator.gpu` の存在だけで判定しない。オブジェクトはあるのに
+アダプタを返さない環境がある。`detectGpu()` を使う。
+
+#### 別のランタイムを使う
+
+`packages/ai/src/local/onnx/ort-session.ts` が
+onnxruntime-web を import する唯一の場所。Transformers.js や
+WebNN に替えるなら、`SessionFactory` を満たす関数を 1 本書くだけでよい。
+
+`createThresholdProvider` は削除しない。何も動かない環境の最後の砦であり、
+E2E がモデル無しでも回るための足場でもある。
 
 ### リモート AI を足す
 

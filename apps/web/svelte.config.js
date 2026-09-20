@@ -13,6 +13,10 @@ export default {
       mode: 'auto',
       directives: {
         'default-src': ['self'],
+        // Svelte writes `style="width: …px"` on the canvas to size it against
+        // the viewport. Inline style attributes cannot carry a nonce, so this
+        // is the one concession the policy makes; scripts stay locked down.
+        'style-src': ['self', 'unsafe-inline'],
         'img-src': ['self', 'blob:', 'data:'],
         'worker-src': ['self', 'blob:'],
         'connect-src': ['self'],

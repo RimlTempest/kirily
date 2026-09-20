@@ -6,6 +6,8 @@ dist
 coverage
 target
 packages/wasm/pkg
+# ビルド入力（tools/fetch-models.ts が生成する）
+apps/web/static/models
 tests/e2e/test-results
 tests/e2e/playwright-report
 .env

@@ -6,7 +6,8 @@
   "exports": {
     "./mask": "./src/mask.ts",
     "./composite": "./src/composite.ts",
-    "./preview": "./src/preview.ts"
+    "./preview": "./src/preview.ts",
+    "./resize": "./src/resize.ts"
   },
   "scripts": {
     "test": "bun test"

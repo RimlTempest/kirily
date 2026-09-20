@@ -17,7 +17,7 @@
 - [x] アップロード（ドロップ + ファイル選択、MIME と寸法の検証）
 - [x] Preview 生成（端末に応じた長辺予算）
 - [x] マスク 3 層と合成
-- [x] 背景透過（プレースホルダのプロバイダ）
+- [x] 背景透過（本物のモデル / ONNX Runtime Web / Web Worker）
 - [x] ブラシ（残す / 消す、太さ、ソフトエッジ）
 - [x] Undo / Redo（領域パッチ方式）
 - [x] 元解像度 PNG 書き出し
@@ -28,8 +28,12 @@
 
 ## M2 — 本物の AI
 
-- [ ] セグメンテーションモデルの選定（精度 / サイズ / ライセンス / 速度）
-- [ ] ONNX Runtime Web + WebGPU、WASM フォールバック
+- [x] セグメンテーションモデルの選定（ADR-0007）
+- [x] ONNX Runtime Web + WebGPU、WASM フォールバック
+- [x] 端末能力に応じた 3 段のモデル選択と、失敗時の段階的な降格
+- [x] 重みの分割配信と SHA-256 検証
+- [ ] BiRefNet 段の実機検証（storage buffer 11 以上の GPU が要る）
+- [ ] IS-Net の fp16 化（170 MiB → 85 MiB）
 - [ ] confidence map を使ったエッジ精緻化
 - [ ] マッティング（髪・毛）
 - [ ] 色の除染（`decontaminate_edges` は Rust 側に実装済み、未配線）

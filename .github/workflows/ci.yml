@@ -54,6 +54,17 @@ jobs:
             exit 1
           fi
 
+      - name: モデルの重みがサイズとハッシュで固定されていること (ADR-0007)
+        run: |
+          # 上流が差し替わっても気づけないと、コードを変えていないのに
+          # 出力だけ変わる。取得元は必ず bytes と sha256 で固定する。
+          ids=$(grep -cE "^\s+id: '" tools/fetch-models.ts)
+          hashes=$(grep -cE "^\s+sha256: '[0-9a-f]{64}'," tools/fetch-models.ts)
+          if [ "$ids" != "$hashes" ]; then
+            echo "::error file=tools/fetch-models.ts::Every model needs a pinned 64-char sha256 ($ids models, $hashes hashes)."
+            exit 1
+          fi
+
       - name: ピクセル処理 crate が wasm-bindgen に依存していないこと
         run: |
           for f in crates/kirily-image/Cargo.toml crates/kirily-mask/Cargo.toml crates/kirily-raster/Cargo.toml; do
@@ -114,7 +125,13 @@ jobs:
       - run: cargo install wasm-pack --locked
       - run: bun install --frozen-lockfile
       - run: bun run wasm:build
+      # 重みは git 管理外。E2E はモデルが無ければその検証を skip するが、
+      # ここでは実際に取りにいって本物のモデルで回す。
+      - name: セグメンテーションモデルを取得
+        run: bun run models:fetch
       - run: bun run build
+      - name: 静的アセットが Cloudflare の 25 MiB 上限に収まること (ADR-0007)
+        run: bun run tools/check-asset-sizes.ts
       - name: ブラウザ向け wasm のサイズ上限
         run: |
           # 初期表示で読むものなので、gzip 300KB を超えたら設計を見直す。

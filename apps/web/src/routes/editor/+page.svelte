@@ -15,6 +15,19 @@
   let tool = $state<EditorTool>(EditorTool.BrushRemove)
 
   const busy = $derived(store.status.kind !== 'idle' && store.status.kind !== 'error')
+
+  /**
+   * Naming the model that ran is what makes a coarse result explainable
+   * instead of feeling like a bug — and it is the only place the user can see
+   * that their device fell back.
+   */
+  const MODEL_LABELS: Record<string, string> = {
+    'birefnet-lite': '高精度モデル',
+    'isnet-general-use': '高精度モデル',
+    u2netp: '軽量モデル',
+    'local-threshold': '簡易処理',
+  }
+  const modelLabel = $derived(MODEL_LABELS[store.providerId] ?? '')
   const painting = $derived(tool === EditorTool.BrushKeep || tool === EditorTool.BrushRemove)
 
   const statusText = $derived.by(() => {
@@ -22,7 +35,9 @@
       case 'decoding':
         return '読み込み中…'
       case 'ai-loading':
-        return 'AI を準備しています…'
+        return store.status.progress > 0
+          ? `AI を準備しています… ${Math.round(store.status.progress * 100)}%`
+          : 'AI を準備しています…'
       case 'ai-processing':
         return 'きりり中…'
       case 'exporting':
@@ -113,6 +128,9 @@
     <footer class="flex flex-wrap items-center justify-between gap-3">
       <p class="text-xs text-ink-muted" aria-live="polite">
         {statusText === '' ? store.privacyLabel : statusText}
+        {#if statusText === '' && modelLabel !== ''}
+          <span class="opacity-70">· {modelLabel}</span>
+        {/if}
       </p>
       <button
         type="button"

@@ -22,6 +22,7 @@ mise install
 bun install
 bunx lefthook install
 bun run wasm:build   # Rust → packages/wasm/pkg（git 管理外）
+bun run models:fetch # AI モデルを取得（約 284 MiB、git 管理外）
 bun run dev          # http://localhost:5173
 ```
 
@@ -67,11 +68,26 @@ kirily/
 
 詳しくは [docs/architecture.md](docs/architecture.md) と [docs/adr/](docs/adr/)。
 
+## 背景透過のモデル
+
+端末の能力に応じて 3 段から選びます（[ADR-0007](docs/adr/0007-segmentation-model.md)）。
+
+| 段  | モデル               | ライセンス | 入力  | サイズ  | 条件                             |
+| --- | -------------------- | ---------- | ----- | ------- | -------------------------------- |
+| 1   | BiRefNet-lite (fp16) | MIT        | 1024² | 109 MiB | WebGPU（storage buffer 11 以上） |
+| 2   | IS-Net general-use   | Apache-2.0 | 1024² | 170 MiB | WebGPU                           |
+| 3   | U²-Netp              | Apache-2.0 | 320²  | 4.4 MiB | 常時（WASM）                     |
+
+重みは git 管理外で、`bun run models:fetch` が取得・検証して
+24 MiB 未満の shard に分割し、**自分のドメインから**配信します
+（Cloudflare の 1 ファイル 25 MiB 上限のため）。
+ページは外部ドメインへ一切接続しません（`connect-src 'self'`）。
+
+推論は Web Worker の中で ONNX Runtime Web が実行します。
+
 ## 現状
 
 垂直スライス（アップロード → 自動透過 → ブラシ補正 → Undo → 元解像度 PNG 書き出し）が
-PC とモバイルの両方で通ります。背景透過はまだ**プレースホルダ**（境界色の
-フラッドフィル）で、本物のセグメンテーションモデルは M2 で入れます。
-差し替え先の境界（`BackgroundRemovalProvider`）はすでに定義済みです。
+PC とモバイルの両方で通ります。
 
 進捗は [docs/roadmap.md](docs/roadmap.md)。

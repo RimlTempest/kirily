@@ -25,8 +25,11 @@ export type ImageInput = {
 export type SegmentationResult = {
   readonly width: number
   readonly height: number
-  /** One byte per pixel: 0 background, 255 foreground. */
-  readonly alpha: Uint8Array
+  /**
+   * One byte per pixel: 0 background, 255 foreground. Backed by a plain
+   * `ArrayBuffer` so it can be transferred out of a worker.
+   */
+  readonly alpha: Uint8Array<ArrayBuffer>
   /**
    * Per-pixel confidence, when the model exposes it. The edge-refinement stage
    * uses it to decide where to trust the mask (kirily-design.md §7.3).

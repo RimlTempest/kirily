@@ -118,13 +118,28 @@ JPEG で書き出す場合、アルファがないので背景色に合成して
 
 ```text
 Renderer:  WebGPU → WebGL → Canvas2D
-AI:        WebGPU → WASM  → Remote（同意があるときだけ）
-Pixel ops: WASM   → TypeScript
+AI:        BiRefNet-lite → IS-Net → U²-Netp → 境界色フォールバック
+Pixel ops: WASM → TypeScript
 ```
 
 フォールバックは**機能単位**で持つ。「WebGPU がないから全部遅い経路」では
-なく、使えるものだけ使う。`loadImageEngine()` と `selectAiBackend()` が
+なく、使えるものだけ使う。`loadImageEngine()` と `planModels()` が
 それぞれの判断点。
+
+AI の段は **提示する前に端末の能力を見る**（`detectGpu()`）。
+落ちてから次へ行く設計だけだと、ユーザーは 100MB 以上を無駄に
+ダウンロードしてから失敗を見ることになる。詳細は ADR-0007。
+
+### 前処理・後処理は仕様の一部
+
+モデルごとの `mean` / `std` / sigmoid の有無 / min-max 再スケールは
+`ModelSpec` に書く。間違えても**クラッシュしない**。
+「それらしいが間違ったマスク」が出るだけなので、元実装（rembg など）に
+合わせ、`tensor.test.ts` で値を固定する。
+
+推論は **Preview 解像度**で行い、出力の alpha を `resampleMask` で
+元解像度へ上げる。モデルの入力は 320² か 1024² であって、
+ユーザーの画像サイズではない。
 
 ## 10. 計測してから速くする
 

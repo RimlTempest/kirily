@@ -6,7 +6,6 @@
  * pixels, and the buffers the renderer reuses. Components call these actions;
  * they never reach for the mask or the canvas themselves (Rule 1, Rule 6).
  */
-import { createThresholdProvider } from '@kirily/ai/local'
 import type { BackgroundRemovalProvider } from '@kirily/ai/provider'
 import type { KirilyError } from '@kirily/contract/error'
 import { exportFileName } from '@kirily/contract/image'
@@ -29,6 +28,7 @@ import { WHITE } from '@kirily/image-core/composite'
 import { budgetFor } from '@kirily/image-core/preview'
 import type { ImageEngine } from '@kirily/wasm'
 import { loadImageEngine } from '@kirily/wasm'
+import { createWorkerProvider, spawnAiWorker } from './ai-client.ts'
 import type { DecodedImage } from './decode.ts'
 import { decodeFile } from './decode.ts'
 import type { ExportFormat } from './export.ts'
@@ -37,12 +37,18 @@ import { downloadBlob, exportImage, extensionFor } from './export.ts'
 export type EditorStore = ReturnType<typeof createEditorStore>
 
 export const createEditorStore = (
-  provider: BackgroundRemovalProvider = createThresholdProvider(),
+  provider: BackgroundRemovalProvider = createWorkerProvider({ createWorker: spawnAiWorker }),
 ) => {
   let decoded = $state<DecodedImage | null>(null)
   let editor = $state<EditorState | null>(null)
   /** Set when a file could not be opened at all — before there is any state. */
   let lastError = $state<KirilyError | null>(null)
+  /**
+   * Which model last produced a mask. Mirrored into reactive state because the
+   * provider's own `info` is a plain object: the chain updates it when it
+   * falls back, and nothing would re-render.
+   */
+  let providerId = $state('')
   let engine: ImageEngine | null = null
 
   /** Composed mask at original resolution. Reused; never reallocated per edit. */
@@ -95,6 +101,10 @@ export const createEditorStore = (
     get privacyLabel(): string {
       return provider.info.label
     },
+    /** Which model actually ran. Surfaced so "why is this coarse?" is answerable. */
+    get providerId(): string {
+      return providerId
+    },
 
     open: async (file: File): Promise<void> => {
       const budget = budgetFor({
@@ -126,6 +136,7 @@ export const createEditorStore = (
       const ready = await provider.initialize((progress) => {
         if (editor !== null) editor = withStatus(editor, { kind: 'ai-loading', progress })
       })
+      providerId = provider.info.id
       if (!ready.ok) return fail(ready.error)
 
       editor = withStatus(editor, { kind: 'ai-processing' })
@@ -136,6 +147,7 @@ export const createEditorStore = (
         height: decoded.preview.height,
         rgba: decoded.preview.rgba,
       })
+      providerId = provider.info.id
       if (!segmented.ok) return fail(segmented.error)
 
       const alpha = resampleMask(segmented.value.alpha, decoded.preview, editor.mask)

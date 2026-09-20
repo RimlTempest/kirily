@@ -6,13 +6,19 @@
   "exports": {
     "./provider": "./src/provider.ts",
     "./local": "./src/local/threshold-provider.ts",
-    "./select": "./src/select.ts"
+    "./select": "./src/select.ts",
+    "./onnx": "./src/local/onnx/onnx-provider.ts",
+    "./onnx/spec": "./src/local/onnx/model-spec.ts",
+    "./onnx/ort": "./src/local/onnx/ort-session.ts",
+    "./chain": "./src/chain.ts",
+    "./onnx/plan": "./src/local/onnx/plan.ts"
   },
   "scripts": {
     "test": "bun test"
   },
   "dependencies": {
     "@kirily/contract": "workspace:*",
-    "@kirily/image-core": "workspace:*"
+    "@kirily/image-core": "workspace:*",
+    "onnxruntime-web": "1.30.0"
   }
 }

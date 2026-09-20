@@ -85,12 +85,35 @@ undo()     → 退避したバイトを書き戻し、いまの値を redo 用�
 どちらも**新しいファイルを 1 本足すだけ**で差し替わること。
 エディタ側を触らないと入らないなら、境界の切り方が間違っている。
 
-## 6. まだ無いもの
+## 6. AI の経路
+
+```text
+Editor Store
+    │  preview RGBA（コピーして転送）
+    ▼
+ai.worker.ts ─ detectGpu() ─→ planModels()
+    │                             │
+    │                   ┌─────────┼─────────┐
+    │                   ▼         ▼         ▼
+    │            BiRefNet-lite  IS-Net    U²-Netp
+    │              (webgpu)    (webgpu)   (wasm)
+    │                   └─────────┼─────────┘
+    │                             ▼
+    │                     createProviderChain
+    │                （ロード失敗も推論失敗も次の段へ）
+    ▼
+alpha mask（転送して戻す）→ resampleMask → MaskLayers.base
+```
+
+重みは `/models/<id>/manifest.json` + shard。
+ONNX Runtime の wasm は Vite が同一オリジンのアセットとして出力する。
+どちらも外部ドメインへは行かない。
+
+## 7. まだ無いもの
 
 `docs/roadmap.md` を参照。特に以下は設計にだけ存在する。
 
-- Web Worker（いまはメインスレッドで動く。4K で詰まったら移す）
 - Crop の UI（`CropState` と Export 側の対応は入っている）
 - WebGL / WebGPU レンダラ（いまは Canvas 2D）
-- 本物のセグメンテーションモデル
+- マッティングと色の除染（`decontaminate_edges` は Rust 側に実装済み、未配線）
 - 視覚的回帰テストと AI 精度評価

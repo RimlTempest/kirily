@@ -53,6 +53,11 @@ bunx modern-web-guidance@latest search "<やりたいこと>"
 - **元画像バッファを書き換えない。** 編集は状態として持ち、最後に合成する。
 - **AI の結果はマスクとして持つ。** RGBA を返させない。
   再実行がユーザーの手作業を消さないよう、`base` / `keep` / `remove` を分ける。
+- **AI 推論をメインスレッドで動かさない。** `ai.worker.ts` 経由。
+- **端末が動かせないモデルを提示しない。** 失敗は 100MB 以上
+  ダウンロードしたあとに起きる。`plan.ts` で能力を先に見る（ADR-0007）。
+- **モデルの重みはサイズと SHA-256 で固定する。** 上流が差し替わると、
+  コードを変えていないのに出力が変わる。
 - **巨大バッファを戻り値で新規確保しない。** 書き込み先を引数で受け取る。
 - **Svelte コンポーネントから WASM / AI プロバイダを直接呼ばない。**
   必ず `editor-store.svelte.ts` を経由する。
@@ -72,14 +77,17 @@ bun run check        # fmt + lint + typecheck + test + rust fmt/clippy/test
 bun run test         # TS の Small テスト
 cargo test --workspace   # Rust の Small テスト
 bun run wasm:build   # Rust → packages/wasm/pkg（生成物は git 管理外）
+bun run models:fetch # セグメンテーションモデルを取得して分割配信（git 管理外）
 bun run e2e          # Playwright（desktop + mobile）。初回は e2e:install
                      # E2E はビルド出力を配信する。直したら build し直す
 ```
 
 コミット前に `bun run check`。lefthook が staged ファイル単位で自動実行する。
 
-`packages/wasm/pkg/` はビルド生成物。型検査の入力でもあるので、
-新しい環境では最初に `bun run wasm:build` を回す。
+`packages/wasm/pkg/`（wasm）と `apps/web/static/models/`（AI の重み）は
+ビルド生成物で git 管理外。新しい環境では最初に
+`bun run wasm:build && bun run models:fetch` を回す。
+モデルが無くても動くが、背景透過は簡易処理に落ちる。
 
 ## MCP の使い分け
 
