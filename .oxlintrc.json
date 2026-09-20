@@ -56,6 +56,13 @@
   },
   "overrides": [
     {
+      // 型と純粋関数だけ。DOM は無いが、assertNever は throw するのが仕事なので
+      // no-throw-in-domain は当てない（起こってはいけないことの表明であって、
+      // 呼び出し側が扱う失敗ではない）。
+      "files": ["packages/contract/src/**/*.ts"],
+      "rules": { "kirily/no-dom-in-core": "error" }
+    },
+    {
       // 画像編集の中核。DOM にも I/O にも触らない = Worker でも単体テストでも動く。
       "files": ["packages/editor-core/src/**/*.ts", "packages/image-core/src/**/*.ts"],
       "rules": {

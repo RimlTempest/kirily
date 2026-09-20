@@ -34,17 +34,6 @@ jobs:
             exit 1
           fi
 
-      - name: ドメイン層に DOM が漏れていないこと
-        run: |
-          hits=$(find packages/image-core/src packages/editor-core/src packages/contract/src \
-            -name '*.ts' ! -name '*.test.ts' 2>/dev/null \
-            | xargs -r grep -nE '\b(document|window|HTMLCanvasElement|OffscreenCanvas|localStorage|fetch)\b' || true)
-          if [ -n "$hits" ]; then
-            echo "$hits"
-            echo "::error::contract / image-core / editor-core must run in a Worker and in a DOM-free test. Inject buffers instead."
-            exit 1
-          fi
-
       - name: Preview を書き出しに使っていないこと (Rule 2)
         run: |
           # エディタの Canvas から直接エンコードすると、元解像度が失われる。
@@ -75,6 +64,9 @@ jobs:
             fi
           done
 
+  # ドメイン層に DOM が漏れていないことは、ここの oxlint
+  # （kirily/no-dom-in-core）が見る。grep では `const window = ...` のような
+  # ローカル変数もコメント中の語も区別できず、実際に誤検知した。
   fmt-lint:
     name: fmt + lint (oxfmt / oxlint / prettier)
     runs-on: ubuntu-latest

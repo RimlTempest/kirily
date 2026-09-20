@@ -183,7 +183,7 @@ const boxBlur = (
   radius: number,
 ): Float32Array => {
   const horizontal = new Float32Array(source.length)
-  const window = radius * 2 + 1
+  const windowSize = radius * 2 + 1
 
   for (let y = 0; y < height; y++) {
     const row = y * width
@@ -193,7 +193,7 @@ const boxBlur = (
     sum += (source[row] ?? 0) * Math.min(radius, width)
 
     for (let x = 0; x < width; x++) {
-      horizontal[row + x] = sum / window
+      horizontal[row + x] = sum / windowSize
       const leaving = Math.max(0, x - radius)
       const entering = Math.min(width - 1, x + radius + 1)
       sum += (source[row + entering] ?? 0) - (source[row + leaving] ?? 0)
@@ -207,7 +207,7 @@ const boxBlur = (
     sum += (horizontal[x] ?? 0) * Math.min(radius, height)
 
     for (let y = 0; y < height; y++) {
-      vertical[y * width + x] = sum / window
+      vertical[y * width + x] = sum / windowSize
       const leaving = Math.max(0, y - radius)
       const entering = Math.min(height - 1, y + radius + 1)
       sum += (horizontal[entering * width + x] ?? 0) - (horizontal[leaving * width + x] ?? 0)

@@ -186,7 +186,7 @@ fn to_byte(value: f32) -> u8 {
 /// Separable box blur with a running sum: O(1) per pixel whatever the radius.
 fn box_blur(source: &[f32], width: usize, height: usize, radius: usize) -> Vec<f32> {
     let mut horizontal = vec![0f32; source.len()];
-    let window = (radius * 2 + 1) as f32;
+    let window_size = (radius * 2 + 1) as f32;
 
     for y in 0..height {
         let row = y * width;
@@ -198,7 +198,7 @@ fn box_blur(source: &[f32], width: usize, height: usize, radius: usize) -> Vec<f
         sum += source[row] * radius.min(width) as f32;
 
         for x in 0..width {
-            horizontal[row + x] = sum / window;
+            horizontal[row + x] = sum / window_size;
             let leaving = x.saturating_sub(radius);
             let entering = (x + radius + 1).min(width - 1);
             sum += source[row + entering] - source[row + leaving];
@@ -214,7 +214,7 @@ fn box_blur(source: &[f32], width: usize, height: usize, radius: usize) -> Vec<f
         sum += horizontal[x] * radius.min(height) as f32;
 
         for y in 0..height {
-            vertical[y * width + x] = sum / window;
+            vertical[y * width + x] = sum / window_size;
             let leaving = y.saturating_sub(radius);
             let entering = (y + radius + 1).min(height - 1);
             sum += horizontal[entering * width + x] - horizontal[leaving * width + x];
