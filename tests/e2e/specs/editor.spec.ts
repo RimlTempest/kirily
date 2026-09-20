@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { alphaOnImage, imageRect, pointOnImage } from './canvas.ts'
 
@@ -200,6 +201,61 @@ test('painting lands where the pointer is, even when zoomed in', async ({ page }
   })
 
   expect(alpha).toBeLessThan(128)
+})
+
+test('cropping changes what the export writes, at the original resolution', async ({ page }) => {
+  await openImage(page)
+  await page.getByRole('button', { name: 'トリミング' }).click()
+
+  // The tool opens with the whole image selected, so the handles are at the
+  // image's corners.
+  const rect = await imageRect(page, 120)
+  expect(rect).not.toBeNull()
+  if (rect === null) return
+
+  const from = pointOnImage(rect, 1, 1)
+  const to = pointOnImage(rect, 0.5, 0.5)
+  await page.mouse.move(from.x - 2, from.y - 2)
+  await page.mouse.down()
+  await page.mouse.move(to.x, to.y, { steps: 10 })
+  await page.mouse.up()
+
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'PNG で書き出す' }).click()
+  const file = await download
+
+  const bytes = await readFile(await file.path())
+  // Still a PNG, and now roughly half the image in each direction — the crop
+  // is applied to the original pixels, not to what was on screen.
+  expect(bytes.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+  const width = bytes.readUInt32BE(16)
+  const height = bytes.readUInt32BE(20)
+  expect(width).toBeGreaterThan(40)
+  expect(width).toBeLessThan(90)
+  expect(height).toBe(width)
+})
+
+test('an aspect preset locks the crop to that shape', async ({ page }) => {
+  await openImage(page)
+  await page.getByRole('button', { name: 'トリミング' }).click()
+  await page.getByRole('button', { name: '16:9', exact: true }).click()
+
+  const rect = await imageRect(page, 120)
+  if (rect === null) return
+  const from = pointOnImage(rect, 1, 1)
+  const to = pointOnImage(rect, 0.4, 0.4)
+  await page.mouse.move(from.x - 2, from.y - 2)
+  await page.mouse.down()
+  await page.mouse.move(to.x, to.y, { steps: 8 })
+  await page.mouse.up()
+
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'PNG で書き出す' }).click()
+  const bytes = await readFile(await (await download).path())
+
+  const width = bytes.readUInt32BE(16)
+  const height = bytes.readUInt32BE(20)
+  expect(width / height).toBeCloseTo(16 / 9, 1)
 })
 
 test('export produces a PNG named after the source file', async ({ page }) => {

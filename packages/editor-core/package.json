@@ -6,7 +6,8 @@
   "exports": {
     "./state": "./src/state.ts",
     "./history": "./src/history.ts",
-    "./commands": "./src/commands.ts"
+    "./commands": "./src/commands.ts",
+    "./crop": "./src/crop.ts"
   },
   "scripts": {
     "test": "bun test"

@@ -5,18 +5,21 @@
    * controls and their labels are the same, so there is one thing to keep
    * accessible rather than two.
    */
+  import { ASPECT_PRESETS } from '@kirily/editor-core/crop'
   import { EditorTool } from '@kirily/editor-core/state'
 
   type Props = {
     tool: EditorTool
     brushSize: number
     tolerance: number
+    ratio: number | null
     busy: boolean
     canUndo: boolean
     canRedo: boolean
     ontool: (tool: EditorTool) => void
     onbrushsize: (size: number) => void
     ontolerance: (tolerance: number) => void
+    onratio: (ratio: number | null) => void
     onauto: () => void
     onundo: () => void
     onredo: () => void
@@ -26,12 +29,14 @@
     tool,
     brushSize,
     tolerance,
+    ratio,
     busy,
     canUndo,
     canRedo,
     ontool,
     onbrushsize,
     ontolerance,
+    onratio,
     onauto,
     onundo,
     onredo,
@@ -42,9 +47,11 @@
     { id: EditorTool.BrushKeep, icon: '🖌', label: '残す' },
     { id: EditorTool.BucketRemove, icon: '🪣', label: 'まとめて消す' },
     { id: EditorTool.BucketKeep, icon: '🫗', label: 'まとめて残す' },
+    { id: EditorTool.Crop, icon: '✂️', label: 'トリミング' },
   ] as const
 
   const usingBucket = $derived(tool === EditorTool.BucketKeep || tool === EditorTool.BucketRemove)
+  const usingCrop = $derived(tool === EditorTool.Crop)
 </script>
 
 <div
@@ -76,7 +83,22 @@
     </button>
   {/each}
 
-  {#if usingBucket}
+  {#if usingCrop}
+    <div class="flex shrink-0 flex-wrap gap-1 px-2 md:px-4" role="group" aria-label="縦横比">
+      {#each ASPECT_PRESETS as preset (preset.label)}
+        <button
+          type="button"
+          class="rounded-lg px-2 py-1 text-xs"
+          class:bg-accent={ratio === preset.ratio}
+          class:text-accent-ink={ratio === preset.ratio}
+          aria-pressed={ratio === preset.ratio}
+          onclick={() => onratio(preset.ratio)}
+        >
+          {preset.label}
+        </button>
+      {/each}
+    </div>
+  {:else if usingBucket}
     <label class="flex shrink-0 items-center gap-2 px-2 text-sm text-ink-muted md:px-4">
       <span class="whitespace-nowrap">色の幅</span>
       <input
@@ -106,24 +128,27 @@
 
   <div class="h-8 w-px shrink-0 bg-line md:h-px md:w-full" role="separator"></div>
 
+  <!-- Labelled, not icon-only: the arrow glyphs render as near-invisible
+       hairlines in the system stack, and these are the two controls a user
+       reaches for most while correcting a mask. -->
   <div class="flex shrink-0 gap-1">
     <button
       type="button"
-      class="rounded-xl px-4 py-3 disabled:opacity-40"
+      class="flex items-center gap-1.5 rounded-xl px-3 py-3 text-sm disabled:opacity-40"
       disabled={!canUndo}
       onclick={onundo}
     >
-      <span aria-hidden="true">↶</span>
-      <span class="sr-only">取り消す</span>
+      <span aria-hidden="true">◀</span>
+      取り消す
     </button>
     <button
       type="button"
-      class="rounded-xl px-4 py-3 disabled:opacity-40"
+      class="flex items-center gap-1.5 rounded-xl px-3 py-3 text-sm disabled:opacity-40"
       disabled={!canRedo}
       onclick={onredo}
     >
-      <span aria-hidden="true">↷</span>
-      <span class="sr-only">やり直す</span>
+      やり直す
+      <span aria-hidden="true">▶</span>
     </button>
   </div>
 </div>

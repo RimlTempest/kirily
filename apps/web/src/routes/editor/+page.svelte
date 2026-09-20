@@ -7,6 +7,7 @@
   import { DEFAULT_BUCKET } from '@kirily/contract/mask'
   import Dropzone from '$lib/components/upload/Dropzone.svelte'
   import EditorCanvas from '$lib/components/editor/EditorCanvas.svelte'
+  import CropOverlay from '$lib/components/editor/CropOverlay.svelte'
   import ZoomControls from '$lib/components/editor/ZoomControls.svelte'
   import Toolbar from '$lib/components/editor/Toolbar.svelte'
   import { createEditorStore } from '$lib/editor/editor-store.svelte.ts'
@@ -33,6 +34,9 @@
   const modelLabel = $derived(MODEL_LABELS[store.providerId] ?? '')
   const painting = $derived(tool === EditorTool.BrushKeep || tool === EditorTool.BrushRemove)
   const filling = $derived(isBucket(tool))
+  const cropping = $derived(tool === EditorTool.Crop)
+
+  let ratio = $state<number | null>(null)
 
   const statusText = $derived.by(() => {
     switch (store.status.kind) {
@@ -150,6 +154,16 @@
           onpan={(dx, dy) => store.pan(dx, dy)}
           onresize={onResize}
         />
+
+        {#if cropping && store.crop !== null && store.image !== null}
+          <CropOverlay
+            crop={store.crop}
+            image={store.image.source}
+            viewport={store.viewport}
+            {ratio}
+            oncrop={(rect) => store.setCrop(rect)}
+          />
+        {/if}
         <div class="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
           <div class="pointer-events-auto">
             <ZoomControls
@@ -166,13 +180,20 @@
           {tool}
           brushSize={store.state.brush.size}
           tolerance={store.state.bucket.tolerance}
+          {ratio}
           {busy}
           canUndo={store.canUndo}
           canRedo={store.canRedo}
-          ontool={(next) => (tool = next)}
+          ontool={(next) => {
+            tool = next
+            // Entering the crop tool with nothing selected would show an
+            // invisible rectangle; start from the whole image instead.
+            if (next === EditorTool.Crop && store.crop === null) store.beginCrop()
+          }}
           onbrushsize={(size) => store.setBrushSize(size)}
           ontolerance={(value) =>
             store.setBucket({ ...(store.state?.bucket ?? DEFAULT_BUCKET), tolerance: value })}
+          onratio={(value) => (ratio = value)}
           onauto={() => void store.removeBackground()}
           onundo={() => store.undo()}
           onredo={() => store.redo()}

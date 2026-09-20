@@ -9,7 +9,7 @@
 import type { BackgroundRemovalProvider } from '@kirily/ai/provider'
 import type { KirilyError } from '@kirily/contract/error'
 import { exportFileName } from '@kirily/contract/image'
-import type { ImagePoint, ScreenPoint, Viewport } from '@kirily/contract/geometry'
+import type { ImagePoint, Rect, ScreenPoint, Viewport } from '@kirily/contract/geometry'
 import { fitViewport, panBy, zoomAt } from '@kirily/contract/geometry'
 import type { BrushMode, BucketSettings } from '@kirily/contract/mask'
 import type { EditorState, EditorStatus } from '@kirily/editor-core/state'
@@ -26,6 +26,7 @@ import {
 } from '@kirily/editor-core/state'
 import { canRedo, canUndo } from '@kirily/editor-core/history'
 import { resample } from '@kirily/editor-core/commands'
+import { fullCrop } from '@kirily/editor-core/crop'
 import { composeMask } from '@kirily/image-core/mask'
 import { WHITE } from '@kirily/image-core/composite'
 import { budgetFor } from '@kirily/image-core/preview'
@@ -197,6 +198,26 @@ export const createEditorStore = (
       if (!next.ok) return fail(next.error)
       editor = next.value
       recompose()
+    },
+
+    /** The crop the export will read, or the whole image when unset. */
+    get crop(): Rect | null {
+      return editor?.crop ?? null
+    },
+
+    setCrop: (rect: Rect | null): void => {
+      if (editor === null) return
+      const next = dispatch(editor, { kind: 'set-crop', rect })
+      if (!next.ok) return fail(next.error)
+      editor = next.value
+    },
+
+    /** Starts cropping with the whole image selected. */
+    beginCrop: (): void => {
+      if (editor === null) return
+      const next = dispatch(editor, { kind: 'set-crop', rect: fullCrop(editor.source) })
+      if (!next.ok) return fail(next.error)
+      editor = next.value
     },
 
     setBucket: (bucket: BucketSettings): void => {
