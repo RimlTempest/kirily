@@ -13,6 +13,7 @@ const spec: ModelSpec = {
   std: [1, 1, 1],
   outputActivation: 'none',
   rescaleOutput: false,
+  solidifyInterior: false,
   provenance: { source: 'test', license: 'none' },
 }
 

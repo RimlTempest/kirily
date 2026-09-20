@@ -12,6 +12,7 @@ const tiny = (overrides: Partial<ModelSpec> = {}): ModelSpec => ({
   std: [1, 1, 1],
   outputActivation: 'none',
   rescaleOutput: false,
+  solidifyInterior: false,
   provenance: { source: 'test', license: 'none' },
   ...overrides,
 })
@@ -117,6 +118,25 @@ describe('toAlphaMask', () => {
     expect(mask.length).toBe(32)
     expect(mask[0]).toBe(0)
     expect(mask[7]).toBe(255)
+  })
+
+  test('closes a low-confidence patch inside the subject when the model asks for it', () => {
+    // 8×8 opaque square with an unsure 2×2 patch in the middle.
+    const output = new Float32Array(64).fill(1)
+    for (const i of [27, 28, 35, 36]) output[i] = 0.6
+    const spec = tiny({ inputSize: 8, solidifyInterior: true })
+
+    const mask = toAlphaMask(output, spec, { width: 8, height: 8 })
+    expect(mask[27]).toBe(255)
+  })
+
+  test('leaves the patch alone when the model does not ask for it', () => {
+    const output = new Float32Array(64).fill(1)
+    for (const i of [27, 28, 35, 36]) output[i] = 0.6
+    const spec = tiny({ inputSize: 8, solidifyInterior: false })
+
+    const mask = toAlphaMask(output, spec, { width: 8, height: 8 })
+    expect(mask[27]).toBe(153)
   })
 
   test('keeps a hard edge hard when the target is the same size', () => {

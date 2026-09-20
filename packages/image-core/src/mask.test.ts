@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import { imagePoint } from '@kirily/contract/geometry'
 import { DEFAULT_BRUSH } from '@kirily/contract/mask'
-import { composeMask, createMaskLayers, layerFor, resampleMask, stampBrush } from './mask.ts'
+import {
+  composeMask,
+  createMaskLayers,
+  layerFor,
+  resampleMask,
+  solidifyInterior,
+  stampBrush,
+} from './mask.ts'
 
 describe('createMaskLayers', () => {
   test('starts fully opaque so the user sees their image before the AI runs', () => {
@@ -127,5 +134,88 @@ describe('resampleMask', () => {
     const out = resampleMask(source, { width: 2, height: 2 }, { width: 8, height: 8 })
     expect(out[0]).toBe(10)
     expect(out[63]).toBe(40)
+  })
+})
+
+/** A `size`² opaque square with a soft 1px edge, holding `interior` inside. */
+const subject = (size: number, interior: (x: number, y: number) => number | null): Uint8Array => {
+  const mask = new Uint8Array(size * size)
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const onEdge = x === 2 || y === 2 || x === size - 3 || y === size - 3
+      const outside = x < 2 || y < 2 || x > size - 3 || y > size - 3
+      const override = interior(x, y)
+      mask[y * size + x] = outside ? 0 : (override ?? (onEdge ? 128 : 255))
+    }
+  }
+  return mask
+}
+
+describe('solidifyInterior', () => {
+  const size = { width: 24, height: 24 }
+  const options = { backgroundBelow: 24, edgeBand: 2, ramp: 0 }
+
+  test('fills a low-confidence patch inside the subject', () => {
+    const mask = subject(24, (x, y) => (x > 9 && x < 15 && y > 9 && y < 15 ? 160 : null))
+    solidifyInterior(mask, size, options)
+    expect(mask[12 * 24 + 12]).toBe(255)
+  })
+
+  test('leaves the soft silhouette alone', () => {
+    const mask = subject(24, () => null)
+    solidifyInterior(mask, size, options)
+    // The 1px anti-aliased ring is within the protected band.
+    expect(mask[2 * 24 + 12]).toBe(128)
+  })
+
+  test('leaves the background transparent', () => {
+    const mask = subject(24, () => null)
+    solidifyInterior(mask, size, options)
+    expect(mask[0]).toBe(0)
+    expect(mask[23 * 24 + 23]).toBe(0)
+  })
+
+  test('keeps a genuine hole, because the model is confident about it', () => {
+    const mask = subject(24, (x, y) => (x > 9 && x < 15 && y > 9 && y < 15 ? 0 : null))
+    solidifyInterior(mask, size, options)
+    expect(mask[12 * 24 + 12]).toBe(0)
+  })
+
+  test('does not reach into a bay that is open to the background', () => {
+    // A notch cut in from the left edge stays background: the trace walks in.
+    const mask = subject(24, (x, y) => (y > 9 && y < 15 && x < 12 ? 0 : null))
+    solidifyInterior(mask, size, options)
+    expect(mask[12 * 24 + 6]).toBe(0)
+  })
+
+  test('ramps instead of stepping, so the closed region has no seam', () => {
+    // A wide subject with an unsure interior: the pixel just past the band is
+    // only partly raised, the one deep inside is fully opaque.
+    const mask = subject(24, (x, y) => (x > 3 && x < 21 && y > 3 && y < 21 ? 100 : null))
+    solidifyInterior(mask, size, { backgroundBelow: 24, edgeBand: 2, ramp: 4 })
+
+    const nearEdge = mask[5 * 24 + 12] ?? 0
+    const deepInside = mask[12 * 24 + 12] ?? 0
+    expect(nearEdge).toBeGreaterThan(100)
+    expect(nearEdge).toBeLessThan(deepInside)
+    expect(deepInside).toBe(255)
+  })
+
+  test('is a no-op when the mask does not match the size', () => {
+    const mask = new Uint8Array(10).fill(100)
+    solidifyInterior(mask, { width: 5, height: 5 }, options)
+    expect(Array.from(mask)).toEqual(Array.from(new Uint8Array(10).fill(100)))
+  })
+
+  test('leaves a fully opaque mask untouched', () => {
+    const mask = new Uint8Array(16).fill(255)
+    solidifyInterior(mask, { width: 4, height: 4 }, options)
+    expect(Array.from(mask).every((v) => v === 255)).toBe(true)
+  })
+
+  test('leaves a fully transparent mask untouched', () => {
+    const mask = new Uint8Array(16)
+    solidifyInterior(mask, { width: 4, height: 4 }, options)
+    expect(Array.from(mask).every((v) => v === 0)).toBe(true)
   })
 })

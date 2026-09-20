@@ -5,6 +5,7 @@
  * crash — it produces a plausible-looking but wrong mask, which is the most
  * expensive kind of bug to find by staring at output images.
  */
+import { solidifyInterior } from '@kirily/image-core/mask'
 import { resampleRgba } from '@kirily/image-core/resize'
 import type { ModelSpec } from './model-spec.ts'
 
@@ -71,6 +72,11 @@ export const toAlphaMask = (
   for (let i = 0; i < plane; i++) {
     small[i] = clampToByte(Math.round((probabilities[i] ?? 0) * 255))
   }
+
+  // Closing the interior happens at the model's own resolution: it is cheaper
+  // there, and the edge band it protects is then measured in the same pixels
+  // the model reasoned about, whatever the user's image size.
+  if (spec.solidifyInterior) solidifyInterior(small, { width: size, height: size })
 
   return resampleMaskTo(small, size, to, out)
 }

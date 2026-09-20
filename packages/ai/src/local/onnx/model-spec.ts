@@ -31,6 +31,13 @@ export type ModelSpec = {
    * from coming out semi-transparent.
    */
   readonly rescaleOutput: boolean
+  /**
+   * Whether to close low-confidence patches inside the subject after
+   * inference. Models return soft values wherever the interior resembles the
+   * background — pale skin against a near-white backdrop, say — which reads as
+   * a ghostly hole in the cut-out (kirily-design.md §7.3).
+   */
+  readonly solidifyInterior: boolean
   /** Where the weights came from, and under what licence. */
   readonly provenance: {
     readonly source: string
@@ -53,6 +60,7 @@ export const BIREFNET_LITE: ModelSpec = {
   // The ONNX export ends in the raw prediction head.
   outputActivation: 'sigmoid',
   rescaleOutput: false,
+  solidifyInterior: true,
   provenance: {
     source: 'https://huggingface.co/onnx-community/BiRefNet_lite-ONNX',
     license: 'MIT',
@@ -73,6 +81,10 @@ export const U2NETP: ModelSpec = {
   // rembg's export already applies the sigmoid inside the graph.
   outputActivation: 'none',
   rescaleOutput: true,
+  // At 320² the model cannot see interior detail well enough to doubt it, so
+  // there is nothing to close — and the step would only risk filling a gap it
+  // blurred over.
+  solidifyInterior: false,
   provenance: {
     source: 'https://github.com/danielgatis/rembg (weights: xuebinqin/U-2-Net)',
     license: 'Apache-2.0',
@@ -99,6 +111,7 @@ export const ISNET_GENERAL: ModelSpec = {
   std: [1, 1, 1],
   outputActivation: 'none',
   rescaleOutput: true,
+  solidifyInterior: true,
   provenance: {
     source: 'https://github.com/danielgatis/rembg (weights: xuebinqin/DIS)',
     license: 'Apache-2.0',
