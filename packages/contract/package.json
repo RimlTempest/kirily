@@ -1,0 +1,16 @@
+{
+  "name": "@kirily/contract",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./result": "./src/result.ts",
+    "./error": "./src/error.ts",
+    "./image": "./src/image.ts",
+    "./mask": "./src/mask.ts",
+    "./geometry": "./src/geometry.ts"
+  },
+  "scripts": {
+    "test": "bun test"
+  }
+}

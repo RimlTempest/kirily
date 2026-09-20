@@ -1,0 +1,96 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "jsPlugins": ["./tools/oxlint-plugin-kirily/index.js"],
+  "plugins": ["typescript", "unicorn", "oxc", "import", "promise"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error",
+    "pedantic": "off",
+    "style": "off"
+  },
+  "env": { "browser": true, "es2024": true, "worker": true },
+  "rules": {
+    "kirily/no-class": "error",
+    "kirily/no-type-assertion": "error",
+    "kirily/no-enum": "error",
+
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
+    "typescript/consistent-type-imports": "error",
+    "typescript/consistent-type-definitions": ["error", "type"],
+    "typescript/no-extraneous-class": "error",
+    "typescript/switch-exhaustiveness-check": "error",
+    // union を網羅した switch は TS が「全経路が返る」と理解するが、この規則は
+    // 理解しない。default を足すと網羅チェックが効かなくなり、メンバー追加で
+    // コンパイルエラーになる性質が壊れる。返し忘れは tsconfig の
+    // noImplicitReturns が見るので、こちらは無効にする。
+    "typescript/consistent-return": "off",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+
+    "eslint/no-console": ["error", { "allow": ["warn", "error"] }],
+    "eslint/eqeqeq": ["error", "always"],
+    "eslint/no-param-reassign": "error",
+    "eslint/prefer-const": "error",
+    "eslint/no-var": "error",
+    "eslint/no-shadow": "error",
+    "eslint/default-param-last": "error",
+    "eslint/prefer-object-spread": "error",
+    "unicorn/prefer-node-protocol": "error",
+    // ピクセルループでは for ... of / forEach よりインデックス for が速い。
+    // 画像処理コードの書き方を lint で縛らない。
+    "unicorn/no-array-for-each": "off",
+    "promise/no-return-wrap": "error",
+    "promise/param-names": "error",
+
+    "import/no-cycle": "error",
+    // CSS とポリフィルは副作用 import が正しい書き方。
+    "import/no-unassigned-import": "off",
+    "import/no-default-export": "error"
+  },
+  "overrides": [
+    {
+      // 画像編集の中核。DOM にも I/O にも触らない = Worker でも単体テストでも動く。
+      "files": ["packages/editor-core/src/**/*.ts", "packages/image-core/src/**/*.ts"],
+      "rules": {
+        "kirily/no-throw-in-domain": "error",
+        "kirily/no-dom-in-core": "error"
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.spec.ts", "tests/**"],
+      "rules": {
+        "typescript/no-explicit-any": "off",
+        "eslint/no-console": "off",
+        "import/no-default-export": "off",
+        "kirily/no-throw-in-domain": "off",
+        "kirily/no-dom-in-core": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/**/*.js",
+        "**/*.config.ts",
+        "**/*.config.js",
+        "**/svelte.config.js",
+        "**/vite.config.ts",
+        "**/+*.ts",
+        "**/hooks.*.ts"
+      ],
+      "rules": {
+        "import/no-default-export": "off",
+        "kirily/no-class": "off"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/*.d.ts",
+    "**/.svelte-kit/**",
+    "**/pkg/**",
+    "**/target/**",
+    "**/node_modules/**"
+  ]
+}

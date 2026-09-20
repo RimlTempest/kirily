@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/contract" },
+    { "path": "./packages/image-core" },
+    { "path": "./packages/editor-core" },
+    { "path": "./packages/ai" },
+    { "path": "./packages/wasm" }
+  ]
+}

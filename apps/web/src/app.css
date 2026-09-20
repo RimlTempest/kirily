@@ -1,0 +1,72 @@
+@import 'tailwindcss';
+
+/**
+ * Kirily's tokens. Every colour the UI uses is named here so dark mode is one
+ * block rather than a modifier on every element, and so a contrast fix happens
+ * in one place.
+ */
+@theme {
+  --color-ink: oklch(0.21 0.01 265);
+  --color-ink-muted: oklch(0.52 0.01 265);
+  --color-surface: oklch(0.99 0.002 265);
+  --color-surface-raised: oklch(1 0 0);
+  --color-line: oklch(0.91 0.005 265);
+  --color-accent: oklch(0.62 0.17 25);
+  --color-accent-ink: oklch(0.99 0 0);
+  --color-danger: oklch(0.55 0.19 25);
+
+  --radius-panel: 1.25rem;
+  --font-sans: ui-sans-serif, system-ui, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-ink: oklch(0.95 0.005 265);
+    --color-ink-muted: oklch(0.68 0.01 265);
+    --color-surface: oklch(0.19 0.008 265);
+    --color-surface-raised: oklch(0.24 0.008 265);
+    --color-line: oklch(0.32 0.01 265);
+    --color-accent: oklch(0.72 0.15 25);
+    --color-accent-ink: oklch(0.16 0.01 265);
+  }
+}
+
+@layer base {
+  html {
+    background: var(--color-surface);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+
+  /* Reduced motion is a setting, not a preference to talk the user out of. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+@utility checkerboard {
+  /* The standard way to show transparency. Sized in CSS pixels so it does not
+     scale with the image and imply a resolution it does not have. */
+  background-image:
+    linear-gradient(45deg, var(--color-line) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--color-line) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--color-line) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--color-line) 75%);
+  background-size: 20px 20px;
+  background-position:
+    0 0,
+    0 10px,
+    10px -10px,
+    -10px 0;
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "semi": false,
+  "singleQuote": true,
+  "trailingComma": "all",
+  "arrowParens": "always",
+  "experimentalOperatorPosition": "start",
+  "ignorePatterns": [
+    "**/*.svelte",
+    "**/*.md",
+    "**/*.css",
+    "**/.svelte-kit/**",
+    "**/pkg/**",
+    "**/target/**",
+    "**/dist/**",
+    "**/node_modules/**",
+    ".agents/skills/**",
+    ".claude/skills/**",
+    "tests/fixtures/**"
+  ]
+}

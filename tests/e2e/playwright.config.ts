@@ -1,0 +1,37 @@
+import { defineConfig, devices } from '@playwright/test'
+
+/**
+ * Desktop and mobile are separate products in Kirily, not one layout at two
+ * widths (kirily-design.md §15). Both run on every change, so a change to one
+ * cannot quietly break the other.
+ *
+ * iOS Safari is the browser most likely to break the Canvas and encoder paths,
+ * so it has its own project — but the WebKit build Playwright ships does not
+ * run on every machine (it crashes on some Apple Silicon setups). It is opt-in
+ * via `KIRILY_E2E_WEBKIT=1` rather than silently skipped, so nobody believes
+ * they have Safari coverage when they do not.
+ */
+const webkit = process.env['KIRILY_E2E_WEBKIT'] === '1'
+
+export default defineConfig({
+  testDir: './specs',
+  fullyParallel: true,
+  forbidOnly: Boolean(process.env['CI']),
+  retries: process.env['CI'] ? 2 : 0,
+  reporter: process.env['CI'] ? [['html'], ['github']] : [['list']],
+  use: {
+    baseURL: 'http://localhost:4173',
+    trace: 'on-first-retry',
+  },
+  projects: [
+    { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
+    { name: 'mobile', use: { ...devices['Pixel 7'] } },
+    ...(webkit ? [{ name: 'mobile-safari', use: { ...devices['iPhone 15'] } }] : []),
+  ],
+  webServer: {
+    command: 'bun run --filter @kirily/web preview',
+    url: 'http://localhost:4173',
+    reuseExistingServer: !process.env['CI'],
+    timeout: 120_000,
+  },
+})

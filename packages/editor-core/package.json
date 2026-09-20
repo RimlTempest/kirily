@@ -1,0 +1,18 @@
+{
+  "name": "@kirily/editor-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./state": "./src/state.ts",
+    "./history": "./src/history.ts",
+    "./commands": "./src/commands.ts"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@kirily/contract": "workspace:*",
+    "@kirily/image-core": "workspace:*"
+  }
+}

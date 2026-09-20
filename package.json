@@ -1,0 +1,45 @@
+{
+  "name": "kirily",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "tests/e2e"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --filter '@kirily/web' dev",
+    "build": "bun run wasm:build && bun run --filter '@kirily/web' build",
+    "typecheck": "bun run --filter '@kirily/web' sync && tsc --build && bun run --filter '@kirily/web' check",
+    "test": "bun test packages/ apps/",
+    "lint": "oxlint --type-aware",
+    "lint:fix": "oxlint --type-aware --fix",
+    "fmt": "oxfmt . && prettier --write --log-level warn \"**/*.{svelte,md,css,html}\"",
+    "fmt:check": "oxfmt --check . && prettier --check --log-level warn \"**/*.{svelte,md,css,html}\"",
+    "rust:fmt": "cargo fmt --all",
+    "rust:fmt:check": "cargo fmt --all -- --check",
+    "rust:lint": "cargo clippy --workspace --all-targets -- -D warnings",
+    "rust:test": "cargo test --workspace",
+    "wasm:build": "bun run --filter '@kirily/wasm' build",
+    "check": "bun run fmt:check && bun run lint && bun run typecheck && bun run test && bun run rust:fmt:check && bun run rust:lint && bun run rust:test",
+    "e2e": "bun run --filter '@kirily/e2e' test",
+    "e2e:install": "bun run --filter '@kirily/e2e' install-browsers",
+    "prepare": "lefthook install",
+    "clean": "find . -maxdepth 3 -name node_modules -type d -prune -exec rm -rf {} + && bun install"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.0",
+    "lefthook": "2.1.12",
+    "oxfmt": "0.65.0",
+    "oxlint": "1.80.0",
+    "oxlint-tsgolint": "7.0.2001",
+    "prettier": "3.6.2",
+    "prettier-plugin-svelte": "3.4.0",
+    "typescript": "5.9.2"
+  },
+  "engines": {
+    "bun": ">=1.4.0",
+    "node": ">=26"
+  },
+  "packageManager": "bun@1.4.0"
+}

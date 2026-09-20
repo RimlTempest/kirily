@@ -1,0 +1,9 @@
+[install]
+exact = true
+# wrangler / vite は各パッケージ自身の package.json から依存を解決する。
+# ルートの hoist 頼みにしないため、workspace パッケージは明示的にリンクする。
+linkWorkspacePackages = true
+linker = "hoisted"
+
+[test]
+coverage = true

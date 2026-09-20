@@ -1,0 +1,47 @@
+[workspace]
+resolver = "3"
+# 責務ごとに crate を分ける（kirily-design.md §4）。
+#   kirily-image  … 画像バッファの基本型。他の crate に依存しない
+#   kirily-mask   … Alpha Mask の操作（ブラシ・feather・モルフォロジ）
+#   kirily-raster … ピクセル処理（合成・crop・resize・色）
+#   kirily-wasm   … JS/WASM の橋渡し。ここだけが wasm-bindgen に依存する
+members = [
+  "crates/kirily-image",
+  "crates/kirily-mask",
+  "crates/kirily-raster",
+  "crates/kirily-wasm",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.98"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+kirily-image = { path = "crates/kirily-image" }
+kirily-mask = { path = "crates/kirily-mask" }
+kirily-raster = { path = "crates/kirily-raster" }
+
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+console_error_panic_hook = "0.1"
+
+# ピクセル処理はユーザーの画像で動く。範囲外アクセスやパニックは
+# 「タブごと落ちる」に直結するので、crate 側で opt-in して禁止する。
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+# 画像処理のホットループでは添字アクセスを使う。境界は crate の入口で
+# 一度だけ検証し（validate_* が Result を返す）、内側では検証済みの長さを前提にする。
+indexing_slicing = "allow"
+todo = "allow"
+
+[profile.release]
+opt-level = 3 # 画像処理は速度優先。サイズは wasm-opt に任せる
+lto = true
+codegen-units = 1
+# strip = true / panic = "abort" は付けない。wasm-bindgen が必要とする
+# カスタムセクションと externref テーブルが落ち、wasm-pack が失敗する。
+strip = false

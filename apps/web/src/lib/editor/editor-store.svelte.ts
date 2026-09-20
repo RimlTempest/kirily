@@ -1,0 +1,224 @@
+/**
+ * The bridge between Svelte and the editor core.
+ *
+ * Everything that decides *what* an edit means lives in `@kirily/editor-core`.
+ * This file owns only what Svelte needs: reactive references, the decoded
+ * pixels, and the buffers the renderer reuses. Components call these actions;
+ * they never reach for the mask or the canvas themselves (Rule 1, Rule 6).
+ */
+import { createThresholdProvider } from '@kirily/ai/local'
+import type { BackgroundRemovalProvider } from '@kirily/ai/provider'
+import type { KirilyError } from '@kirily/contract/error'
+import { exportFileName } from '@kirily/contract/image'
+import type { ImagePoint } from '@kirily/contract/geometry'
+import type { BrushMode } from '@kirily/contract/mask'
+import type { EditorState, EditorStatus } from '@kirily/editor-core/state'
+import {
+  createEditorState,
+  dispatch,
+  exportRect,
+  redoState,
+  undoState,
+  withBrush,
+  withStatus,
+} from '@kirily/editor-core/state'
+import { canRedo, canUndo } from '@kirily/editor-core/history'
+import { resample } from '@kirily/editor-core/commands'
+import { composeMask, resampleMask } from '@kirily/image-core/mask'
+import { WHITE } from '@kirily/image-core/composite'
+import { budgetFor } from '@kirily/image-core/preview'
+import type { ImageEngine } from '@kirily/wasm'
+import { loadImageEngine } from '@kirily/wasm'
+import type { DecodedImage } from './decode.ts'
+import { decodeFile } from './decode.ts'
+import type { ExportFormat } from './export.ts'
+import { downloadBlob, exportImage, extensionFor } from './export.ts'
+
+export type EditorStore = ReturnType<typeof createEditorStore>
+
+export const createEditorStore = (
+  provider: BackgroundRemovalProvider = createThresholdProvider(),
+) => {
+  let decoded = $state<DecodedImage | null>(null)
+  let editor = $state<EditorState | null>(null)
+  /** Set when a file could not be opened at all — before there is any state. */
+  let lastError = $state<KirilyError | null>(null)
+  let engine: ImageEngine | null = null
+
+  /** Composed mask at original resolution. Reused; never reallocated per edit. */
+  let fullMask: Uint8Array = new Uint8Array(0)
+  /** The same mask at preview resolution, for the canvas. */
+  let previewMask = $state(new Uint8Array(0))
+  let previewVersion = $state(0)
+
+  const engineOrLoad = async (): Promise<ImageEngine> => {
+    engine ??= await loadImageEngine()
+    return engine
+  }
+
+  const recompose = (): void => {
+    if (editor === null || decoded === null) return
+    composeMask(editor.mask, fullMask)
+    resampleMask(fullMask, editor.mask, decoded.preview, previewMask)
+    previewVersion += 1
+  }
+
+  const fail = (error: KirilyError): void => {
+    if (editor === null) return
+    editor = withStatus(editor, { kind: 'error', error })
+  }
+
+  return {
+    get image(): DecodedImage | null {
+      return decoded
+    },
+    get state(): EditorState | null {
+      return editor
+    },
+    get previewMask(): Uint8Array {
+      return previewMask
+    },
+    /** Bumped on every mask change so the canvas knows to redraw. */
+    get previewVersion(): number {
+      return previewVersion
+    },
+    get status(): EditorStatus {
+      return editor?.status ?? { kind: 'idle' }
+    },
+    get canUndo(): boolean {
+      return editor !== null && canUndo(editor.history)
+    },
+    get canRedo(): boolean {
+      return editor !== null && canRedo(editor.history)
+    },
+    /** What the UI tells the user about where their image goes. */
+    get privacyLabel(): string {
+      return provider.info.label
+    },
+
+    open: async (file: File): Promise<void> => {
+      const budget = budgetFor({
+        isMobile: globalThis.matchMedia?.('(pointer: coarse)').matches ?? false,
+        deviceMemoryGb: readDeviceMemory(),
+      })
+
+      const result = await decodeFile(file, budget)
+      if (!result.ok) {
+        decoded = null
+        editor = null
+        lastError = result.error
+        return
+      }
+
+      lastError = null
+      decoded = result.value
+      editor = createEditorState(result.value.source)
+      fullMask = new Uint8Array(result.value.source.width * result.value.source.height)
+      previewMask = new Uint8Array(result.value.preview.width * result.value.preview.height)
+      recompose()
+    },
+
+    /** "背景をきりり" — runs the provider and replaces the AI layer. */
+    removeBackground: async (): Promise<void> => {
+      if (editor === null || decoded === null) return
+      editor = withStatus(editor, { kind: 'ai-loading', progress: 0 })
+
+      const ready = await provider.initialize((progress) => {
+        if (editor !== null) editor = withStatus(editor, { kind: 'ai-loading', progress })
+      })
+      if (!ready.ok) return fail(ready.error)
+
+      editor = withStatus(editor, { kind: 'ai-processing' })
+      // Inference runs on the preview, as a model would: the mask is scaled up
+      // to the original resolution afterwards (kirily-design.md §7.2).
+      const segmented = await provider.removeBackground({
+        width: decoded.preview.width,
+        height: decoded.preview.height,
+        rgba: decoded.preview.rgba,
+      })
+      if (!segmented.ok) return fail(segmented.error)
+
+      const alpha = resampleMask(segmented.value.alpha, decoded.preview, editor.mask)
+      const next = dispatch(editor, { kind: 'replace-base-mask', alpha })
+      if (!next.ok) return fail(next.error)
+
+      editor = withStatus(next.value, { kind: 'idle' })
+      recompose()
+    },
+
+    paint: (points: readonly ImagePoint[], mode: BrushMode): void => {
+      if (editor === null) return
+      const brush = editor.brush
+      const resampled = resample(points, brush)
+      if (resampled.length === 0) return
+
+      const next = dispatch(editor, { kind: 'brush-stroke', mode, brush, points: resampled })
+      if (!next.ok) return fail(next.error)
+      editor = next.value
+      recompose()
+    },
+
+    setBrushSize: (size: number): void => {
+      if (editor === null) return
+      editor = withBrush(editor, { ...editor.brush, size: Math.max(1, Math.min(400, size)) })
+    },
+
+    undo: (): void => {
+      if (editor === null) return
+      editor = undoState(editor)
+      recompose()
+    },
+
+    redo: (): void => {
+      if (editor === null) return
+      editor = redoState(editor)
+      recompose()
+    },
+
+    download: async (format: ExportFormat): Promise<void> => {
+      if (editor === null || decoded === null) return
+      editor = withStatus(editor, { kind: 'exporting' })
+
+      const result = await exportImage(
+        await engineOrLoad(),
+        {
+          width: decoded.source.width,
+          height: decoded.source.height,
+          rgba: decoded.rgba,
+          mask: fullMask,
+        },
+        {
+          format,
+          quality: 0.92,
+          background: WHITE,
+          rect: exportRect(editor),
+        },
+      )
+      if (!result.ok) return fail(result.error)
+
+      downloadBlob(result.value, exportFileName(decoded.source.fileName, extensionFor(format)))
+      editor = withStatus(editor, { kind: 'idle' })
+    },
+
+    reset: (): void => {
+      decoded = null
+      editor = null
+      lastError = null
+      fullMask = new Uint8Array(0)
+      previewMask = new Uint8Array(0)
+    },
+
+    get lastError(): KirilyError | null {
+      return lastError
+    },
+  }
+}
+
+/**
+ * `navigator.deviceMemory` is Chromium-only. Read defensively rather than
+ * assuming a shape the type definitions do not promise.
+ */
+const readDeviceMemory = (): number | undefined => {
+  const value = Reflect.get(globalThis.navigator ?? {}, 'deviceMemory')
+  return typeof value === 'number' ? value : undefined
+}

@@ -1,0 +1,70 @@
+# staged ファイル単位で動かして、毎コミットで回せる速さに保つ。
+# 全体スイープは CI（`bun run check`）が行う。
+pre-commit:
+  parallel: true
+  jobs:
+    - name: oxfmt
+      glob: '*.{js,ts,json,jsonc}'
+      run: bunx oxfmt {staged_files}
+      stage_fixed: true
+
+    - name: prettier
+      glob: '*.{svelte,md,css,html}'
+      run: bunx prettier --write --log-level warn {staged_files}
+      stage_fixed: true
+
+    - name: oxlint
+      glob: '*.{js,ts}'
+      run: bunx oxlint --type-aware --deny-warnings {staged_files}
+
+    - name: svelte-check
+      glob: '*.svelte'
+      # .svelte の中の TS は oxlint が読めない。型と a11y 警告はこちらで見る。
+      run: bun run --filter '@kirily/web' check
+
+    - name: cargo-fmt
+      glob: '*.rs'
+      run: cargo fmt --all -- --check
+
+    - name: cargo-clippy
+      glob: '*.rs'
+      run: cargo clippy --workspace --all-targets -- -D warnings
+
+    - name: no-committed-images
+      glob: '*.{png,jpg,jpeg,webp,gif,avif}'
+      # 個人の画像が履歴に残ると消せない。テスト用の画像は tests/fixtures/ にだけ置く。
+      run: |
+        for f in {staged_files}; do
+          case "$f" in
+            tests/fixtures/*|apps/web/static/*|docs/*) ;;
+            *)
+              echo "Images belong in tests/fixtures/, apps/web/static/ or docs/: $f" >&2
+              exit 1 ;;
+          esac
+        done
+
+    - name: secrets
+      run: |
+        # *.example は値が空なので対象外。
+        if git diff --cached -U0 -- ':!*.example' | grep -nE '^\+.*(BEGIN [A-Z ]*PRIVATE KEY|(AI_API_KEY|CLOUDFLARE_API_TOKEN)\s*[=:]\s*"?[A-Za-z0-9_.~/+-]{8,}|sk-[A-Za-z0-9]{20,})'; then
+          echo "Refusing to commit what looks like a secret. Put it in .dev.vars (gitignored) or a Wrangler secret." >&2
+          exit 1
+        fi
+
+pre-push:
+  parallel: false
+  jobs:
+    - name: typecheck
+      run: bun run typecheck
+
+    - name: test
+      run: bun run test
+
+commit-msg:
+  jobs:
+    - name: conventional-commit
+      run: |
+        head -1 "{1}" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9/-]+\))?!?: .{1,}' || {
+          echo "Commit message must be Conventional Commits, e.g. 'feat(mask): add feather command'" >&2
+          exit 1
+        }

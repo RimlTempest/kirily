@@ -1,0 +1,12 @@
+node_modules
+.svelte-kit
+dist
+target
+packages/wasm/pkg
+tests/fixtures
+bun.lock
+# ベンダリングしたスキルは上流の書式のまま保つ（差分が読めなくなるため）
+.agents/skills
+.claude/skills
+docs/kirily-design.md
+docs/IMPLEMENTATION.md

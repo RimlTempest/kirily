@@ -1,0 +1,15 @@
+node_modules
+.svelte-kit
+.wrangler
+dist
+*.tsbuildinfo
+coverage
+target
+packages/wasm/pkg
+tests/e2e/test-results
+tests/e2e/playwright-report
+.env
+.env.*
+!.env.example
+.dev.vars
+.DS_Store

@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  guard:
+    name: 不変条件の検査
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 画像をサーバーに置くバインディングを足していないこと (ADR-0004)
+        run: |
+          # R2 / KV / D1 を足すということは、画像か、画像にまつわる何かを
+          # サーバーへ置くということ。トップページの約束が変わるので、
+          # ADR なしには通さない。
+          if grep -qE '^\s*"(r2_buckets|kv_namespaces|d1_databases)"\s*:' apps/web/wrangler.jsonc; then
+            echo "::error file=apps/web/wrangler.jsonc::Storage bindings change the privacy promise. Write an ADR first (ADR-0004)."
+            exit 1
+          fi
+
+      - name: ドメイン層に DOM が漏れていないこと
+        run: |
+          hits=$(find packages/image-core/src packages/editor-core/src packages/contract/src \
+            -name '*.ts' ! -name '*.test.ts' 2>/dev/null \
+            | xargs -r grep -nE '\b(document|window|HTMLCanvasElement|OffscreenCanvas|localStorage|fetch)\b' || true)
+          if [ -n "$hits" ]; then
+            echo "$hits"
+            echo "::error::contract / image-core / editor-core must run in a Worker and in a DOM-free test. Inject buffers instead."
+            exit 1
+          fi
+
+      - name: Preview を書き出しに使っていないこと (Rule 2)
+        run: |
+          # エディタの Canvas から直接エンコードすると、元解像度が失われる。
+          hits=$(grep -rnE '\b(toDataURL|toBlob)\s*\(' apps/web/src --include='*.ts' --include='*.svelte' || true)
+          if [ -n "$hits" ]; then
+            echo "$hits"
+            echo "::error::Export must start from the original pixels in export.ts, not from a preview canvas."
+            exit 1
+          fi
+
+      - name: ピクセル処理 crate が wasm-bindgen に依存していないこと
+        run: |
+          for f in crates/kirily-image/Cargo.toml crates/kirily-mask/Cargo.toml crates/kirily-raster/Cargo.toml; do
+            if grep -qE '^\s*wasm-bindgen' "$f"; then
+              echo "::error file=$f::Pixel crates must stay runnable under plain 'cargo test'. Keep wasm-bindgen in crates/kirily-wasm."
+              exit 1
+            fi
+          done
+
+  fmt-lint:
+    name: fmt + lint (oxfmt / oxlint / prettier)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v3
+        with: { cache: true }
+      - run: bun install --frozen-lockfile
+      - run: bun run fmt:check
+      - run: bun run lint
+
+  rust:
+    name: rust (fmt / clippy / test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v3
+        with: { cache: true }
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - name: ブラウザ向け wasm がビルドできること
+        run: cargo check -p kirily-wasm --target wasm32-unknown-unknown
+
+  typecheck-test:
+    name: typecheck + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v3
+        with: { cache: true }
+      - uses: Swatinem/rust-cache@v2
+      # wasm-bindgen が生成する .d.ts は型検査の入力。git 管理外なのでここで作る。
+      - run: cargo install wasm-pack --locked
+      - run: bun install --frozen-lockfile
+      - run: bun run wasm:build
+      - run: bun run typecheck
+      - run: bun run test
+
+  e2e:
+    name: e2e (desktop + mobile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v3
+        with: { cache: true }
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install wasm-pack --locked
+      - run: bun install --frozen-lockfile
+      - run: bun run wasm:build
+      - run: bun run build
+      - name: ブラウザ向け wasm のサイズ上限
+        run: |
+          # 初期表示で読むものなので、gzip 300KB を超えたら設計を見直す。
+          size=$(find packages/wasm/pkg -name '*.wasm' -exec gzip -c {} + | wc -c)
+          echo "browser wasm: ${size} bytes gzip"
+          if [ "$size" -eq 0 ]; then
+            echo "::error::No wasm artifact found. Check the wasm-pack out-name."
+            exit 1
+          fi
+          if [ "$size" -gt 307200 ]; then
+            echo "::error::Browser wasm exceeded 300KB gzip."
+            exit 1
+          fi
+      - run: bun run e2e:install
+      - run: bun run e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: tests/e2e/playwright-report/
+          retention-days: 7

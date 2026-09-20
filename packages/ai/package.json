@@ -1,0 +1,18 @@
+{
+  "name": "@kirily/ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./provider": "./src/provider.ts",
+    "./local": "./src/local/threshold-provider.ts",
+    "./select": "./src/select.ts"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@kirily/contract": "workspace:*",
+    "@kirily/image-core": "workspace:*"
+  }
+}

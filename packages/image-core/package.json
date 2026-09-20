@@ -1,0 +1,17 @@
+{
+  "name": "@kirily/image-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./mask": "./src/mask.ts",
+    "./composite": "./src/composite.ts",
+    "./preview": "./src/preview.ts"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@kirily/contract": "workspace:*"
+  }
+}

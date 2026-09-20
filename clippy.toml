@@ -1,0 +1,5 @@
+# 本体コードでは unwrap / expect / panic! を禁止する（Cargo.toml の
+# [workspace.lints.clippy]）。テストでは「落ちたら失敗」が正しい表現なので許す。
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true

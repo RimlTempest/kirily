@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kirily-web",
+  "compatibility_date": "2026-09-21",
+  "pages_build_output_dir": ".svelte-kit/cloudflare",
+  // R2 / KV / D1 bindings are deliberately absent. The MVP processes images in
+  // the browser and stores nothing (kirily-design.md §22, §43). Adding a
+  // binding here means the privacy promise on the landing page has to change
+  // too — CI checks for it.
+}
