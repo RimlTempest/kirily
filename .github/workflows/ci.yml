@@ -15,6 +15,9 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # 依存のインストールスクリプトが勝手に外へ出ないよう、CI では
+  # 何も足さない。bun は依存の postinstall を既定で実行しない。
+  DO_NOT_TRACK: '1'
 
 jobs:
   guard:
@@ -22,7 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with: { persist-credentials: false }
 
       - name: 画像をサーバーに置くバインディングを足していないこと (ADR-0004)
         run: |
@@ -55,6 +59,14 @@ jobs:
             exit 1
           fi
 
+      - name: GitHub Actions が commit SHA で固定されていること
+        run: |
+          # タグは可動。乗っ取られた action が次の実行から任意コードを走らせる。
+          if grep -nE '^\s*-?\s*uses:\s*[^@]+@(v[0-9.]+|main|master)\s*$' .github/workflows/*.yml; then
+            echo "::error::Pin every action to a full commit SHA (keep the tag in a trailing comment)."
+            exit 1
+          fi
+
       - name: ピクセル処理 crate が wasm-bindgen に依存していないこと
         run: |
           for f in crates/kirily-image/Cargo.toml crates/kirily-mask/Cargo.toml crates/kirily-raster/Cargo.toml; do
@@ -72,22 +84,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
-      - uses: jdx/mise-action@v3
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with: { persist-credentials: false }
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
         with: { cache: true }
       - run: bun install --frozen-lockfile
       - run: bun run fmt:check
       - run: bun run lint
+      # 既知の脆弱性を持つ依存で本番を作らない。lockfile に固定した版が
+      # あとから勧告を受けることがあるので、毎回見る。
+      - run: bun audit --audit-level=high
 
   rust:
     name: rust (fmt / clippy / test)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
-      - uses: jdx/mise-action@v3
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with: { persist-credentials: false }
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
         with: { cache: true }
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
@@ -99,10 +116,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v5
-      - uses: jdx/mise-action@v3
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with: { persist-credentials: false }
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
         with: { cache: true }
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       # wasm-bindgen が生成する .d.ts は型検査の入力。git 管理外なのでここで作る。
       - run: cargo install wasm-pack --locked
       - run: bun install --frozen-lockfile
@@ -118,10 +136,11 @@ jobs:
     # 丸ごと食うので、上限を置く。固まりやすい step には個別の上限も置いた。
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v5
-      - uses: jdx/mise-action@v3
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with: { persist-credentials: false }
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
         with: { cache: true }
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - run: cargo install wasm-pack --locked
       - run: bun install --frozen-lockfile
       - run: bun run wasm:build
@@ -155,7 +174,7 @@ jobs:
       # ランナーに GPU アダプタが無いので CPU 段（U²-Netp）が走る。
       # WebGPU 段は実機で `bun run e2e:webgpu`（ADR-0007）。
       - run: bun run e2e
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
           name: playwright-report

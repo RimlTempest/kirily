@@ -1,9 +1,20 @@
 [install]
+# 依存は正確なバージョンで固定する。範囲指定は、こちらが何もしていない間に
+# 別のコードが入ってくる経路になる。
 exact = true
+
+# 公開直後のバージョンは使わない。悪意ある公開が撤回・検知されるまでの
+# 猶予を置く（7 日）。既に bun.lock に載っているバージョンには効かないので、
+# 依存を足すときの防御であって、既存の固定を守るのは --frozen-lockfile のほう。
+minimumReleaseAge = 604800
 # wrangler / vite は各パッケージ自身の package.json から依存を解決する。
 # ルートの hoist 頼みにしないため、workspace パッケージは明示的にリンクする。
 linkWorkspacePackages = true
 linker = "hoisted"
+
+# 依存の postinstall は既定で実行しない（bun の既定）。必要な依存だけを
+# package.json の trustedDependencies に挙げる。いまは 1 つも要らない:
+# protobufjs と @tailwindcss/oxide はスクリプトを止めたまま動いている。
 
 [test]
 coverage = true

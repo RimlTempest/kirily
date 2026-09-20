@@ -25,12 +25,12 @@ import { canRedo, canUndo } from '@kirily/editor-core/history'
 import { resample } from '@kirily/editor-core/commands'
 import { composeMask, resampleMask } from '@kirily/image-core/mask'
 import { WHITE } from '@kirily/image-core/composite'
-import { DEFAULT_REFINE, refineRadiusFor } from '@kirily/image-core/guided'
 import { budgetFor } from '@kirily/image-core/preview'
 import type { ImageEngine } from '@kirily/wasm'
 import { loadImageEngine } from '@kirily/wasm'
 import { createWorkerProvider, spawnAiWorker } from './ai-client.ts'
 import type { DecodedImage } from './decode.ts'
+import { removeBackground as removeBackgroundFlow } from './remove-background.ts'
 import { decodeFile } from './decode.ts'
 import type { ExportFormat } from './export.ts'
 import { downloadBlob, exportImage, extensionFor } from './export.ts'
@@ -40,8 +40,11 @@ export type EditorStore = ReturnType<typeof createEditorStore>
 export const createEditorStore = (
   provider: BackgroundRemovalProvider = createWorkerProvider({ createWorker: spawnAiWorker }),
 ) => {
-  let decoded = $state<DecodedImage | null>(null)
-  let editor = $state<EditorState | null>(null)
+  // `$state.raw`, not `$state`: both hold multi-megabyte pixel and mask
+  // buffers and are always replaced wholesale, never mutated field by field.
+  // Deep proxying them would cost on every read and buy nothing.
+  let decoded = $state.raw<DecodedImage | null>(null)
+  let editor = $state.raw<EditorState | null>(null)
   /** Set when a file could not be opened at all — before there is any state. */
   let lastError = $state<KirilyError | null>(null)
   /**
@@ -54,8 +57,12 @@ export const createEditorStore = (
 
   /** Composed mask at original resolution. Reused; never reallocated per edit. */
   let fullMask: Uint8Array = new Uint8Array(0)
-  /** The same mask at preview resolution, for the canvas. */
-  let previewMask = $state(new Uint8Array(0))
+  /**
+   * The same mask at preview resolution, for the canvas. Raw and mutated in
+   * place — `previewVersion` is what the renderer watches, because comparing
+   * several megabytes of mask on every edit is the thing to avoid.
+   */
+  let previewMask = $state.raw(new Uint8Array(0))
   let previewVersion = $state(0)
 
   const engineOrLoad = async (): Promise<ImageEngine> => {
@@ -134,38 +141,24 @@ export const createEditorStore = (
       if (editor === null || decoded === null) return
       editor = withStatus(editor, { kind: 'ai-loading', progress: 0 })
 
-      const ready = await provider.initialize((progress) => {
-        if (editor !== null) editor = withStatus(editor, { kind: 'ai-loading', progress })
-      })
+      const result = await removeBackgroundFlow(
+        {
+          provider,
+          engine: engineOrLoad,
+          onLoadProgress: (progress) => {
+            if (editor !== null) editor = withStatus(editor, { kind: 'ai-loading', progress })
+          },
+          onInferenceStart: () => {
+            if (editor !== null) editor = withStatus(editor, { kind: 'ai-processing' })
+          },
+          onRefineSkipped: (error) => console.warn('[kirily] mask refinement skipped:', error.code),
+        },
+        decoded,
+      )
       providerId = provider.info.id
-      if (!ready.ok) return fail(ready.error)
+      if (!result.ok) return fail(result.error)
 
-      editor = withStatus(editor, { kind: 'ai-processing' })
-      // The original pixels, not the preview. The preview has already been
-      // shrunk once for the screen; feeding it to the model would resample the
-      // image twice before inference and again on the way back, and each pass
-      // costs detail the model then cannot see (kirily-design.md §7.2).
-      const segmented = await provider.removeBackground({
-        width: decoded.source.width,
-        height: decoded.source.height,
-        rgba: decoded.rgba,
-      })
-      providerId = provider.info.id
-      if (!segmented.ok) return fail(segmented.error)
-
-      // The mask comes back at the original resolution, but its edges are the
-      // model's edges at the model's resolution — near the subject's outline
-      // rather than on it. One guided-filter pass, with the original pixels as
-      // the guide, pulls them onto the real boundary (ADR-0008).
-      const alpha = segmented.value.alpha
-      const refined = (await engineOrLoad()).refineMask(decoded.rgba, alpha, decoded.source, {
-        ...DEFAULT_REFINE,
-        radius: refineRadiusFor(decoded.source),
-      })
-      // A refinement that fails is not worth losing the mask over.
-      if (!refined.ok) console.warn('[kirily] mask refinement skipped:', refined.error.code)
-
-      const next = dispatch(editor, { kind: 'replace-base-mask', alpha })
+      const next = dispatch(editor, { kind: 'replace-base-mask', alpha: result.value.alpha })
       if (!next.ok) return fail(next.error)
 
       editor = withStatus(next.value, { kind: 'idle' })

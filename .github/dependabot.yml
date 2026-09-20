@@ -1,0 +1,39 @@
+# 依存の更新を自動で知らせる。更新を止めると、既知の脆弱性を抱えたまま
+# 固定し続けることになる — それもサプライチェーンのリスク。
+#
+# ただし公開直後のバージョンは掴まない。`cooldown` は Dependabot 側の
+# 待機で、bunfig.toml の minimumReleaseAge と同じ狙い（ADR-0009）。
+version: 2
+updates:
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      svelte:
+        patterns:
+          - 'svelte*'
+          - '@sveltejs/*'
+      tooling:
+        patterns:
+          - 'ox*'
+          - 'prettier*'
+          - 'lefthook'
+          - 'typescript'
+
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  # action を SHA で固定している以上、更新は Dependabot に任せる。
+  # 固定したまま放置すると、修正済みの脆弱性を抱え続けることになる。
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

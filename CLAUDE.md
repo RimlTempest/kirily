@@ -68,6 +68,29 @@ bunx modern-web-guidance@latest search "<やりたいこと>"
 - **ログに画像の内容・ファイル名を出さない。** 出してよいのは操作名・
   所要時間・寸法・対応状況・エラーコードだけ。
 - **実装より先に失敗するテストを書く。**
+- **書く場所ごとに答える問いを変える。** 同じことを 2 か所に書かない。
+
+  | 書く場所       | 答える問い  |
+  | -------------- | ----------- |
+  | コード         | **How**     |
+  | テストコード   | **What**    |
+  | コミットログ   | **Why**     |
+  | コードコメント | **Why not** |
+
+  詳細と例は `kirily-typescript` の「どこに何を書くか」。
+
+## 依存を足す・上げるとき
+
+サプライチェーンは実際に攻撃されている経路（ADR-0009）。
+
+- **正確なバージョンで固定する。** 範囲指定は書かない（`exact = true`）
+- **公開から 7 日待つ**（`minimumReleaseAge`）。急ぐなら理由を添えて手で外す
+- **`postinstall` を要求する依存は、なぜ要るのか調べてから** `trustedDependencies`
+  に足す。いまは 1 つも無い（`bun pm untrusted` で確認できる）
+- **GitHub Actions は commit SHA で固定する。** タグは可動。
+  CI の `guard` が検査する
+- `bun audit --audit-level=high` を通らないものはマージしない
+- **更新を止めない。** 止めるのもリスク。Dependabot が weekly で上げてくる
 
 ## コマンド
 
@@ -81,6 +104,8 @@ bun run models:fetch # セグメンテーションモデルを取得して分割
 bun run e2e          # Playwright（desktop + mobile）。初回は e2e:install
                      # E2E はビルド出力を配信する。直したら build し直す
 bun run e2e:webgpu   # WebGPU 段の E2E。実 GPU が要る（CI では回らない）
+bun audit            # 依存の既知の脆弱性
+bun pm untrusted     # 止めた postinstall の一覧
 ```
 
 コミット前に `bun run check`。lefthook が staged ファイル単位で自動実行する。

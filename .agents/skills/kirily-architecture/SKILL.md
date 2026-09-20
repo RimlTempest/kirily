@@ -49,6 +49,12 @@ description: Kirily の構成と拡張手順。どこに何を置くか迷った
   `tools/check-asset-sizes.ts` がビルド後に検査する。
 - **ページから外部ドメインへ接続しない。** CSP は `connect-src 'self'`。
   モデルの重みもランタイムも自前ドメインから配る。
+- **依存を足すときは ADR-0009 を読む。** 正確な版で固定し、公開から 7 日待ち、
+  `postinstall` を要求するなら理由を調べる。
+- **`.svelte.ts` にロジックを置かない。** `bun test` は runes を解釈できないので、
+  テストしたいものは runes の外（素の `.ts`）へ出す。
+  例: `remove-background.ts` は AI の手順を持ち、
+  `editor-store.svelte.ts` はそれを runes に繋ぐだけ。
 
 CI の `guard` ジョブがこれらを検査する。
 

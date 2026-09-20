@@ -5,6 +5,9 @@ target
 packages/wasm/pkg
 tests/fixtures
 bun.lock
+# archify の成果物はバイト固定（deliver が SHA-256 を発行する）
+docs/diagrams
+
 # ベンダリングしたスキルは上流の書式のまま保つ（差分が読めなくなるため）
 .agents/skills
 .claude/skills

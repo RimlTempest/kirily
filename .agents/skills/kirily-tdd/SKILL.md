@@ -31,7 +31,24 @@ description: Kirily のテスト規約。機能追加・バグ修正の実装を
 `packages/*` は DOM を持たないので**全部 Small で書ける**。
 書けないなら、それは DOM が漏れている。
 
-## 3. 画像処理のテストの書き方
+## 3. テストは What を書く
+
+テスト名は**振る舞いの主張**にする。実装の手順ではない。
+落ちたときに、テスト名だけで「何が壊れたか」が分かること。
+
+```ts
+// ○ 保証されている振る舞い
+test('keeps a genuine hole, because the model is confident about it')
+test('manual edits win over the AI mask')
+// ✗ 手順しか書いていない
+test('calls solidifyInterior with backgroundBelow 24')
+test('works')
+```
+
+書く場所ごとの役割分担は `kirily-typescript` の「どこに何を書くか」。
+コードに How、テストに What、コミットログに Why、コメントに Why not。
+
+## 4. 画像処理のテストの書き方
 
 ### 値で検証する。画像で検証しない
 
@@ -92,7 +109,7 @@ assert_eq!(rgba[8], 127, "half-transparent black over white is mid grey");
 expect(rgba[8]).toBe(127);
 ```
 
-## 4. Undo は「完全に戻る」ことをテストする
+## 5. Undo は「完全に戻る」ことをテストする
 
 ```ts
 const before = new Uint8Array(layers.remove);
@@ -103,7 +120,7 @@ expect([...layers.remove]).toEqual([...before]);
 
 バイト単位で一致すること。「だいたい戻る」は戻っていない。
 
-## 5. AI プロバイダのテスト
+## 6. AI プロバイダのテスト
 
 プロバイダは差し替え可能なので、**素のオブジェクトで代替する**。
 
@@ -118,7 +135,7 @@ const provider: BackgroundRemovalProvider = {
 
 モデルそのものの精度は単体テストでは測らない。§7 を読む。
 
-## 6. E2E
+## 7. E2E
 
 `tests/e2e/`。**desktop と mobile の両方で同じフローを回す**
 （モバイルは PC の縮小版ではないので、片方だけ通っても意味がない）。
@@ -145,7 +162,7 @@ page.getByRole('button', { name: '背景をきりり' }); // ○
 page.getByTestId('auto-button'); // × 最後の手段
 ```
 
-## 7. AI 精度の評価は本番コードから分離する
+## 8. AI 精度の評価は本番コードから分離する
 
 「remove.bg くらい」を感覚で判断しない。評価は別ディレクトリで行う
 （kirily-design.md §28）。
@@ -160,7 +177,7 @@ evaluation/
 モデルを差し替えるときは、この回帰テストを通してから入れる。
 特に**境界品質**（髪・指・商品の細部）を重視する。
 
-## 8. 不安定なテストを作らない
+## 9. 不安定なテストを作らない
 
 - `sleep` を書かない。状態が変わるのを待つ（`expect(...).toBeEnabled()`）
 - 現在時刻・乱数を直接呼ばない（注入する）
@@ -169,7 +186,7 @@ evaluation/
 
 flaky を見つけたら **skip せずその日のうちに直す**。
 
-## 9. コマンド
+## 10. コマンド
 
 ```bash
 bun test packages/                 # Small（TS）

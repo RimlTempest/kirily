@@ -53,11 +53,33 @@ export const createEditorStore = (provider = createThresholdProvider()) => {
 };
 ```
 
-### 巨大なバッファを `$state` にしない
+### 巨大なバッファは `$state.raw`
 
-マスクは数 MB ある。プロキシで包むと読み書きが桁違いに遅くなる。
-`version: number` を `$state` にして、バッファ自体は素の
-`Uint8Array` として持つ。再描画のトリガは version を見る。
+`$state` はオブジェクトと配列を深くプロキシする。数 MB のピクセルバッファを
+抱えた状態を包むと、読むたびに costs がかかって何も得られない。
+**まるごと置き換える値は `$state.raw`。**
+
+```ts
+let decoded = $state.raw<DecodedImage | null>(null)
+let previewMask = $state.raw(new Uint8Array(0))
+let previewVersion = $state(0) // 再描画のトリガはこちら
+```
+
+マスクは in-place で書き換え、`version` を上げて再描画させる。
+数 MB を毎回比較させない。
+
+### `.svelte.ts` にロジックを置かない
+
+`bun test` は runes を解釈できない。**テストしたいものは runes の外**
+（素の `.ts`）へ出し、`.svelte.ts` はそれを繋ぐだけにする。
+
+```
+remove-background.ts        AI の手順（引数で依存を受け取る、テストがある）
+editor-store.svelte.ts      それを $state に繋ぐだけ
+```
+
+プラグインを足せば `.svelte.ts` もテストできるが、そのために
+0.0.x のパッケージを依存に足すのは割に合わない（ADR-0009）。
 
 ## 3. PC とモバイルは別の操作体系
 
