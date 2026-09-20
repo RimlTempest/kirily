@@ -23,6 +23,7 @@
 - [x] 元解像度 PNG 書き出し
 - [x] E2E（desktop + mobile）+ axe によるアクセシビリティ検査
 - [ ] iOS Safari の E2E（`KIRILY_E2E_WEBKIT=1` で opt-in。既定では回っていない）
+- [x] バケツ（クリックで領域をまとめて／OKLab の許容差、soft edge）
 - [ ] ズーム / パン
 - [ ] トリミングの UI（状態と書き出し側は対応済み）
 

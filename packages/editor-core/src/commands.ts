@@ -9,12 +9,14 @@
  * the affected layer's previous bytes — bounded by the stroke's bounding box,
  * not the image — so history costs the area the user touched.
  */
-import type { BrushSettings, MaskLayers } from '@kirily/contract/mask'
+import type { BrushSettings, BucketSettings, MaskLayers } from '@kirily/contract/mask'
 import type { BrushMode } from '@kirily/contract/mask'
 import type { ImagePoint, Rect } from '@kirily/contract/geometry'
 import type { KirilyError } from '@kirily/contract/error'
 import type { Result } from '@kirily/contract/result'
 import { assertNever, ok } from '@kirily/contract/result'
+import type { Bounds } from '@kirily/image-core/flood'
+import { floodSelect } from '@kirily/image-core/flood'
 import { layerFor, stampBrush } from '@kirily/image-core/mask'
 
 /**
@@ -34,12 +36,36 @@ export type ReplaceBaseMaskCommand = {
   readonly alpha: Uint8Array
 }
 
+/**
+ * The bucket: one click takes a whole region in or out.
+ *
+ * It carries the click and the settings, not the pixels it selected. The
+ * selection is several megabytes on a large image, and keeping it in the
+ * command would keep it alive in the undo history for as long as the step
+ * lives there.
+ */
+export type BucketFillCommand = {
+  readonly kind: 'bucket-fill'
+  readonly mode: BrushMode
+  readonly at: ImagePoint
+  readonly settings: BucketSettings
+  /**
+   * The image the selection is computed from — the original pixels, not the
+   * preview, so a click at 25% zoom picks the same region as at 100%.
+   */
+  readonly rgba: Uint8ClampedArray
+}
+
 export type SetCropCommand = {
   readonly kind: 'set-crop'
   readonly rect: Rect | null
 }
 
-export type EditorCommand = BrushStrokeCommand | ReplaceBaseMaskCommand | SetCropCommand
+export type EditorCommand =
+  | BrushStrokeCommand
+  | ReplaceBaseMaskCommand
+  | BucketFillCommand
+  | SetCropCommand
 
 /** Which mask layer a command writes to, or null when it writes none. */
 export const targetLayer = (command: EditorCommand, layers: MaskLayers): Uint8Array | null => {
@@ -48,6 +74,8 @@ export const targetLayer = (command: EditorCommand, layers: MaskLayers): Uint8Ar
       return layerFor(layers, command.mode)
     case 'replace-base-mask':
       return layers.base
+    case 'bucket-fill':
+      return layerFor(layers, command.mode)
     case 'set-crop':
       return null
     default:
@@ -83,10 +111,67 @@ export const affectedRect = (command: EditorCommand, layers: MaskLayers): Rect |
     }
     case 'replace-base-mask':
       return { x: 0, y: 0, width: layers.width, height: layers.height }
+    case 'bucket-fill':
+      // Not knowable without running the fill. `prepareCommand` runs it once
+      // and reports the real box; this conservative answer only shows up if
+      // something calls `affectedRect` directly.
+      return { x: 0, y: 0, width: layers.width, height: layers.height }
     case 'set-crop':
       return null
     default:
       return assertNever(command)
+  }
+}
+
+/**
+ * Works out what a command will touch and hands back a closure that does it.
+ *
+ * The bucket is why this exists. Its extent is only known once the flood fill
+ * has run, and the history has to snapshot the affected region *before* the
+ * command is applied. Without this, the fill would run twice — once to measure
+ * and once to write — which on a full-resolution image is the difference
+ * between a click that lands and one that stutters.
+ */
+export type PreparedCommand = {
+  readonly layer: Uint8Array | null
+  readonly rect: Rect | null
+  readonly apply: () => Result<void, KirilyError>
+}
+
+export const prepareCommand = (command: EditorCommand, layers: MaskLayers): PreparedCommand => {
+  if (command.kind !== 'bucket-fill') {
+    return {
+      layer: targetLayer(command, layers),
+      rect: affectedRect(command, layers),
+      apply: () => applyCommand(command, layers),
+    }
+  }
+
+  const selection = new Uint8Array(layers.width * layers.height)
+  const bounds: Bounds = { x: 0, y: 0, width: 0, height: 0 }
+  floodSelect(command.rgba, layers, command.at, command.settings, selection, bounds)
+
+  const layer = layerFor(layers, command.mode)
+  const rect = bounds.width > 0 && bounds.height > 0 ? bounds : null
+
+  return {
+    layer,
+    rect,
+    apply: () => {
+      if (rect === null) return ok(undefined)
+      // The override layers accumulate towards opaque, like the brush: a
+      // second click on the same region does not undo the first.
+      for (let y = rect.y; y < rect.y + rect.height; y++) {
+        for (let x = rect.x; x < rect.x + rect.width; x++) {
+          const index = y * layers.width + x
+          const strength = selection[index] ?? 0
+          if (strength === 0) continue
+          const current = layer[index] ?? 0
+          layer[index] = current > strength ? current : strength
+        }
+      }
+      return ok(undefined)
+    },
   }
 }
 
@@ -107,6 +192,8 @@ export const applyCommand = (
     case 'replace-base-mask':
       layers.base.set(command.alpha)
       return ok(undefined)
+    case 'bucket-fill':
+      return prepareCommand(command, layers).apply()
     case 'set-crop':
       return ok(undefined)
     default:

@@ -125,7 +125,10 @@ E2E がモデル無しでも回るための足場でもある。
 3. → `targetLayer` / `affectedRect` / `applyCommand` の `switch` が
    **3 か所ともコンパイルエラーになる**。埋める
 4. `affectedRect` は必ず正しく返す。ここが広すぎると Undo が重くなり、
-   狭すぎると Undo で戻りきらない
+   狭すぎると Undo で戻りきらない。
+   **領域が実行してみないと分からないツール**（バケツなど）は
+   `prepareCommand` に分岐を足す。`execute` が 1 回だけ走らせて、
+   その結果から rect と apply の両方を作る
 5. `packages/editor-core/src/commands.test.ts` と `history.test.ts` に
    「実行 → Undo で完全に戻る」テストを足す
 6. UI は `Toolbar.svelte` に 1 要素足す

@@ -12,7 +12,7 @@ import type { KirilyError } from '@kirily/contract/error'
 import type { Result } from '@kirily/contract/result'
 import { ok } from '@kirily/contract/result'
 import type { EditorCommand } from './commands.ts'
-import { affectedRect, applyCommand, targetLayer } from './commands.ts'
+import { prepareCommand } from './commands.ts'
 
 type Patch = {
   readonly layer: Uint8Array
@@ -67,14 +67,16 @@ export const execute = (
   command: EditorCommand,
   layers: MaskLayers,
 ): Result<History, KirilyError> => {
-  const layer = targetLayer(command, layers)
-  const rect = affectedRect(command, layers)
+  // One pass: for the bucket, this is where the flood fill runs, so the patch
+  // below snapshots exactly what the fill is about to overwrite.
+  const prepared = prepareCommand(command, layers)
+  const { layer, rect } = prepared
   const patch: Patch | null =
     layer !== null && rect !== null
       ? { layer, rect, before: readRegion(layer, layers, rect) }
       : null
 
-  const applied = applyCommand(command, layers)
+  const applied = prepared.apply()
   if (!applied.ok) return applied
 
   const undoStack = [...history.undoStack, { command, patch }].slice(-MAX_HISTORY_DEPTH)

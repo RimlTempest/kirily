@@ -6,13 +6,14 @@
  * a DOM and reusable if the UI is ever replaced.
  */
 import type { SourceImage } from '@kirily/contract/image'
-import type { BrushSettings, MaskLayers } from '@kirily/contract/mask'
-import { DEFAULT_BRUSH } from '@kirily/contract/mask'
+import type { BrushSettings, BucketSettings, MaskLayers } from '@kirily/contract/mask'
+import { DEFAULT_BRUSH, DEFAULT_BUCKET } from '@kirily/contract/mask'
 import type { Rect, Viewport } from '@kirily/contract/geometry'
 import { IDENTITY_VIEWPORT } from '@kirily/contract/geometry'
 import type { KirilyError } from '@kirily/contract/error'
+import type { BrushMode } from '@kirily/contract/mask'
 import type { Result } from '@kirily/contract/result'
-import { ok } from '@kirily/contract/result'
+import { assertNever, ok } from '@kirily/contract/result'
 import { createMaskLayers } from '@kirily/image-core/mask'
 import type { EditorCommand } from './commands.ts'
 import type { History } from './history.ts'
@@ -22,6 +23,8 @@ export const EditorTool = {
   Pan: 'pan',
   BrushKeep: 'brush-keep',
   BrushRemove: 'brush-remove',
+  BucketKeep: 'bucket-keep',
+  BucketRemove: 'bucket-remove',
   Crop: 'crop',
 } as const
 
@@ -47,6 +50,7 @@ export type EditorState = {
   readonly viewport: Viewport
   readonly tool: EditorTool
   readonly brush: BrushSettings
+  readonly bucket: BucketSettings
   readonly status: EditorStatus
   readonly history: History
 }
@@ -58,6 +62,7 @@ export const createEditorState = (source: SourceImage): EditorState => ({
   viewport: IDENTITY_VIEWPORT,
   tool: EditorTool.BrushRemove,
   brush: DEFAULT_BRUSH,
+  bucket: DEFAULT_BUCKET,
   status: { kind: 'idle' },
   history: emptyHistory,
 })
@@ -116,6 +121,32 @@ export const withBrush = (state: EditorState, brush: BrushSettings): EditorState
   ...state,
   brush,
 })
+
+export const withBucket = (state: EditorState, bucket: BucketSettings): EditorState => ({
+  ...state,
+  bucket,
+})
+
+/** Which mask layer a tool writes to, or null when it paints nothing. */
+export const modeOf = (tool: EditorTool): BrushMode | null => {
+  switch (tool) {
+    case EditorTool.BrushKeep:
+    case EditorTool.BucketKeep:
+      return 'keep'
+    case EditorTool.BrushRemove:
+    case EditorTool.BucketRemove:
+      return 'remove'
+    case EditorTool.Pan:
+    case EditorTool.Crop:
+      return null
+    default:
+      return assertNever(tool)
+  }
+}
+
+/** True when the tool fills a region from a single click. */
+export const isBucket = (tool: EditorTool): boolean =>
+  tool === EditorTool.BucketKeep || tool === EditorTool.BucketRemove
 
 /** The rectangle the export pipeline reads — the crop, or the whole image. */
 export const exportRect = (state: EditorState): Rect =>

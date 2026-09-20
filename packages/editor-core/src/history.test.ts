@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { imagePoint } from '@kirily/contract/geometry'
+import type { BrushMode } from '@kirily/contract/mask'
+import { DEFAULT_BUCKET } from '@kirily/contract/mask'
 import { createMaskLayers } from '@kirily/image-core/mask'
 import type { EditorCommand } from './commands.ts'
 import {
@@ -104,5 +106,100 @@ describe('execute / undo / redo', () => {
     expect([...layers.base].every((v) => v === 0)).toBe(true)
     undo(executed.value, layers)
     expect([...layers.base].every((v) => v === 255)).toBe(true)
+  })
+})
+
+describe('bucket fill', () => {
+  const SIZE = 16
+
+  /** White canvas, red square in the middle, white dot inside the square. */
+  const scene = (): Uint8ClampedArray => {
+    const rgba = new Uint8ClampedArray(SIZE * SIZE * 4).fill(255)
+    const paint = (x: number, y: number, r: number, g: number, b: number): void => {
+      const at = (y * SIZE + x) * 4
+      rgba[at] = r
+      rgba[at + 1] = g
+      rgba[at + 2] = b
+      rgba[at + 3] = 255
+    }
+    for (let y = 4; y < 12; y++) for (let x = 4; x < 12; x++) paint(x, y, 220, 40, 40)
+    paint(8, 8, 255, 255, 255)
+    return rgba
+  }
+
+  const fill = (x: number, y: number, mode: BrushMode = 'remove'): EditorCommand => ({
+    kind: 'bucket-fill',
+    mode,
+    at: imagePoint(x, y),
+    settings: DEFAULT_BUCKET,
+    rgba: scene(),
+  })
+
+  test('takes the whole clicked region in one step', () => {
+    const layers = createMaskLayers(SIZE, SIZE)
+    const result = execute(emptyHistory, fill(0, 0), layers)
+
+    expect(result.ok).toBe(true)
+    expect(layers.remove[0]).toBe(255)
+    expect(layers.remove[15 * SIZE + 15]).toBe(255)
+    // The red square is a different colour, so it stays.
+    expect(layers.remove[6 * SIZE + 6]).toBe(0)
+  })
+
+  test('undo puts back exactly what the fill overwrote', () => {
+    const layers = createMaskLayers(SIZE, SIZE)
+    const before = new Uint8Array(layers.remove)
+
+    const executed = execute(emptyHistory, fill(0, 0), layers)
+    expect(executed.ok).toBe(true)
+    if (!executed.ok) return
+
+    undo(executed.value, layers)
+    expect(Array.from(layers.remove)).toEqual(Array.from(before))
+  })
+
+  test('snapshots only the region it filled, not the whole layer', () => {
+    const layers = createMaskLayers(SIZE, SIZE)
+    // Clicking inside the red square touches an 8x8 box, not the 16x16 image.
+    const executed = execute(emptyHistory, fill(6, 6), layers)
+    expect(executed.ok).toBe(true)
+    if (!executed.ok) return
+
+    const entry = executed.value.undoStack.at(-1)
+    expect(entry?.patch?.rect).toEqual({ x: 4, y: 4, width: 8, height: 8 })
+  })
+
+  test('is one undo step even though it changed many pixels', () => {
+    const layers = createMaskLayers(SIZE, SIZE)
+    const executed = execute(emptyHistory, fill(0, 0), layers)
+    if (!executed.ok) return
+    expect(executed.value.undoStack.length).toBe(1)
+  })
+
+  test('accumulates rather than toggling when clicked twice', () => {
+    const layers = createMaskLayers(SIZE, SIZE)
+    let history = emptyHistory
+    for (let i = 0; i < 2; i++) {
+      const result = execute(history, fill(0, 0), layers)
+      if (!result.ok) return
+      history = result.value
+    }
+    expect(layers.remove[0]).toBe(255)
+  })
+
+  test('records nothing when the click lands outside the image', () => {
+    const layers = createMaskLayers(SIZE, SIZE)
+    const executed = execute(emptyHistory, fill(-5, -5), layers)
+    expect(executed.ok).toBe(true)
+    if (!executed.ok) return
+    expect(executed.value.undoStack.at(-1)?.patch).toBeNull()
+  })
+
+  test('writes to the layer the mode selects', () => {
+    const layers = createMaskLayers(SIZE, SIZE)
+    execute(emptyHistory, fill(0, 0, 'keep'), layers)
+
+    expect(layers.keep[0]).toBe(255)
+    expect(layers.remove[0]).toBe(0)
   })
 })

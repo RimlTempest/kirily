@@ -15,13 +15,26 @@
     /** Changes whenever the mask changes; used to trigger a redraw. */
     version: number
     painting: boolean
+    /** True when a single click fills a region instead of painting a stroke. */
+    filling: boolean
     brushSize: number
     onstroke: (points: readonly ImagePoint[]) => void
+    onfill: (at: ImagePoint) => void
     /** Preview pixels per original-image pixel. */
     previewScale: number
   }
 
-  const { preview, mask, version, painting, brushSize, onstroke, previewScale }: Props = $props()
+  const {
+    preview,
+    mask,
+    version,
+    painting,
+    filling,
+    brushSize,
+    onstroke,
+    onfill,
+    previewScale,
+  }: Props = $props()
 
   let canvas: HTMLCanvasElement | null = $state(null)
   let frame: HTMLDivElement | null = $state(null)
@@ -88,9 +101,18 @@
   }
 
   const onPointerDown = (event: PointerEvent): void => {
-    if (!painting || event.button !== 0) return
+    if (event.button !== 0) return
     const point = pointAt(event)
     if (point === null) return
+
+    // The bucket acts on press, not on release: it is one click, and waiting
+    // for the release would make it feel like a drag that did nothing.
+    if (filling) {
+      onfill(point)
+      return
+    }
+    if (!painting) return
+
     strokePointer = event.pointerId
     stroke = [point]
     canvas?.setPointerCapture(event.pointerId)
@@ -121,7 +143,7 @@
     class="max-h-full max-w-full touch-none"
     style:width={`${preview.width * viewport.scale}px`}
     style:height={`${preview.height * viewport.scale}px`}
-    style:cursor={painting ? 'crosshair' : 'default'}
+    style:cursor={filling ? 'cell' : painting ? 'crosshair' : 'default'}
     aria-label="編集中の画像"
     onpointerdown={onPointerDown}
     onpointermove={onPointerMove}
@@ -134,6 +156,12 @@
       class="pointer-events-none absolute bottom-3 rounded-full bg-surface-raised/90 px-3 py-1 text-xs text-ink-muted"
     >
       ブラシ {Math.round(brushSize)}px
+    </p>
+  {:else if filling}
+    <p
+      class="pointer-events-none absolute bottom-3 rounded-full bg-surface-raised/90 px-3 py-1 text-xs text-ink-muted"
+    >
+      クリックした色の範囲をまとめて
     </p>
   {/if}
 </div>

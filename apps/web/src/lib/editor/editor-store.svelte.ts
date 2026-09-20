@@ -10,7 +10,7 @@ import type { BackgroundRemovalProvider } from '@kirily/ai/provider'
 import type { KirilyError } from '@kirily/contract/error'
 import { exportFileName } from '@kirily/contract/image'
 import type { ImagePoint } from '@kirily/contract/geometry'
-import type { BrushMode } from '@kirily/contract/mask'
+import type { BrushMode, BucketSettings } from '@kirily/contract/mask'
 import type { EditorState, EditorStatus } from '@kirily/editor-core/state'
 import {
   createEditorState,
@@ -19,6 +19,7 @@ import {
   redoState,
   undoState,
   withBrush,
+  withBucket,
   withStatus,
 } from '@kirily/editor-core/state'
 import { canRedo, canUndo } from '@kirily/editor-core/history'
@@ -175,6 +176,29 @@ export const createEditorStore = (
       if (!next.ok) return fail(next.error)
       editor = next.value
       recompose()
+    },
+
+    /** One click takes the whole region in or out. */
+    bucketFill: (at: ImagePoint, mode: BrushMode): void => {
+      if (editor === null || decoded === null) return
+
+      const next = dispatch(editor, {
+        kind: 'bucket-fill',
+        mode,
+        at,
+        settings: editor.bucket,
+        // The original pixels, not the preview: a click at 25% zoom has to
+        // pick the same region as one at 100%.
+        rgba: decoded.rgba,
+      })
+      if (!next.ok) return fail(next.error)
+      editor = next.value
+      recompose()
+    },
+
+    setBucket: (bucket: BucketSettings): void => {
+      if (editor === null) return
+      editor = withBucket(editor, bucket)
     },
 
     setBrushSize: (size: number): void => {

@@ -10,11 +10,13 @@
   type Props = {
     tool: EditorTool
     brushSize: number
+    tolerance: number
     busy: boolean
     canUndo: boolean
     canRedo: boolean
     ontool: (tool: EditorTool) => void
     onbrushsize: (size: number) => void
+    ontolerance: (tolerance: number) => void
     onauto: () => void
     onundo: () => void
     onredo: () => void
@@ -23,11 +25,13 @@
   const {
     tool,
     brushSize,
+    tolerance,
     busy,
     canUndo,
     canRedo,
     ontool,
     onbrushsize,
+    ontolerance,
     onauto,
     onundo,
     onredo,
@@ -36,7 +40,11 @@
   const tools = [
     { id: EditorTool.BrushRemove, icon: '🧹', label: '消す' },
     { id: EditorTool.BrushKeep, icon: '🖌', label: '残す' },
+    { id: EditorTool.BucketRemove, icon: '🪣', label: 'まとめて消す' },
+    { id: EditorTool.BucketKeep, icon: '🫗', label: 'まとめて残す' },
   ] as const
+
+  const usingBucket = $derived(tool === EditorTool.BucketKeep || tool === EditorTool.BucketRemove)
 </script>
 
 <div
@@ -68,18 +76,33 @@
     </button>
   {/each}
 
-  <label class="flex shrink-0 items-center gap-2 px-2 text-sm text-ink-muted md:px-4">
-    <span class="whitespace-nowrap">太さ</span>
-    <input
-      type="range"
-      min="1"
-      max="200"
-      step="1"
-      value={brushSize}
-      class="w-28 accent-[var(--color-accent)] md:w-full"
-      oninput={(event) => onbrushsize(event.currentTarget.valueAsNumber)}
-    />
-  </label>
+  {#if usingBucket}
+    <label class="flex shrink-0 items-center gap-2 px-2 text-sm text-ink-muted md:px-4">
+      <span class="whitespace-nowrap">色の幅</span>
+      <input
+        type="range"
+        min="0.002"
+        max="0.08"
+        step="0.002"
+        value={tolerance}
+        class="w-28 accent-[var(--color-accent)] md:w-full"
+        oninput={(event) => ontolerance(event.currentTarget.valueAsNumber)}
+      />
+    </label>
+  {:else}
+    <label class="flex shrink-0 items-center gap-2 px-2 text-sm text-ink-muted md:px-4">
+      <span class="whitespace-nowrap">太さ</span>
+      <input
+        type="range"
+        min="1"
+        max="200"
+        step="1"
+        value={brushSize}
+        class="w-28 accent-[var(--color-accent)] md:w-full"
+        oninput={(event) => onbrushsize(event.currentTarget.valueAsNumber)}
+      />
+    </label>
+  {/if}
 
   <div class="h-8 w-px shrink-0 bg-line md:h-px md:w-full" role="separator"></div>
 

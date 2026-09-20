@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { userMessage } from '@kirily/contract/error'
-  import { EditorTool } from '@kirily/editor-core/state'
+  import { EditorTool, isBucket, modeOf } from '@kirily/editor-core/state'
   import type { ImagePoint } from '@kirily/contract/geometry'
+  import { DEFAULT_BUCKET } from '@kirily/contract/mask'
   import Dropzone from '$lib/components/upload/Dropzone.svelte'
   import EditorCanvas from '$lib/components/editor/EditorCanvas.svelte'
   import Toolbar from '$lib/components/editor/Toolbar.svelte'
@@ -29,6 +30,7 @@
   }
   const modelLabel = $derived(MODEL_LABELS[store.providerId] ?? '')
   const painting = $derived(tool === EditorTool.BrushKeep || tool === EditorTool.BrushRemove)
+  const filling = $derived(isBucket(tool))
 
   const statusText = $derived.by(() => {
     switch (store.status.kind) {
@@ -55,7 +57,13 @@
   })
 
   const onStroke = (points: readonly ImagePoint[]): void => {
-    store.paint(points, tool === EditorTool.BrushKeep ? 'keep' : 'remove')
+    const mode = modeOf(tool)
+    if (mode !== null) store.paint(points, mode)
+  }
+
+  const onFill = (at: ImagePoint): void => {
+    const mode = modeOf(tool)
+    if (mode !== null) store.bucketFill(at, mode)
   }
 
   const onKeydown = (event: KeyboardEvent): void => {
@@ -103,9 +111,11 @@
           mask={store.previewMask}
           version={store.previewVersion}
           {painting}
+          {filling}
           brushSize={store.state.brush.size}
           previewScale={store.image.preview.width / store.image.source.width}
           onstroke={onStroke}
+          onfill={onFill}
         />
       </section>
 
@@ -113,11 +123,14 @@
         <Toolbar
           {tool}
           brushSize={store.state.brush.size}
+          tolerance={store.state.bucket.tolerance}
           {busy}
           canUndo={store.canUndo}
           canRedo={store.canRedo}
           ontool={(next) => (tool = next)}
           onbrushsize={(size) => store.setBrushSize(size)}
+          ontolerance={(value) =>
+            store.setBucket({ ...(store.state?.bucket ?? DEFAULT_BUCKET), tolerance: value })}
           onauto={() => void store.removeBackground()}
           onundo={() => store.undo()}
           onredo={() => store.redo()}

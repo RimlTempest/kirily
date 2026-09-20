@@ -72,6 +72,62 @@ test('a brush stroke is one undo step', async ({ page }) => {
   await expect(page.getByRole('button', { name: '取り消す' })).toBeEnabled()
 })
 
+test('the bucket takes a whole region in one click', async ({ page }) => {
+  await openImage(page)
+
+  const undo = page.getByRole('button', { name: '取り消す' })
+  await expect(undo).toBeDisabled()
+
+  await page.getByRole('button', { name: 'まとめて消す' }).click()
+  // The tolerance slider replaces the brush width one for the bucket.
+  await expect(page.getByLabel('色の幅')).toBeVisible()
+
+  const canvas = page.getByLabel('編集中の画像')
+  const box = await canvas.boundingBox()
+  expect(box).not.toBeNull()
+  if (box === null) return
+
+  // The fixture is a red square on white; a corner is background.
+  await page.mouse.click(box.x + 4, box.y + 4)
+
+  await expect(undo).toBeEnabled()
+
+  const alpha = await page.evaluate(() => {
+    const element = document.querySelector('canvas')
+    if (!(element instanceof HTMLCanvasElement)) return null
+    const context = element.getContext('2d', { willReadFrequently: true })
+    if (context === null) return null
+    return {
+      corner: context.getImageData(2, 2, 1, 1).data[3],
+      centre: context.getImageData(
+        Math.floor(element.width / 2),
+        Math.floor(element.height / 2),
+        1,
+        1,
+      ).data[3],
+    }
+  })
+
+  // One click removed the whole background and left the subject alone.
+  expect(alpha?.corner).toBeLessThan(32)
+  expect(alpha?.centre).toBeGreaterThan(223)
+})
+
+test('a bucket fill is a single undo step', async ({ page }) => {
+  await openImage(page)
+  await page.getByRole('button', { name: 'まとめて消す' }).click()
+
+  const canvas = page.getByLabel('編集中の画像')
+  const box = await canvas.boundingBox()
+  if (box === null) return
+  await page.mouse.click(box.x + 4, box.y + 4)
+
+  const undo = page.getByRole('button', { name: '取り消す' })
+  await expect(undo).toBeEnabled()
+  await undo.click()
+  await expect(undo).toBeDisabled()
+})
+
 test('export produces a PNG named after the source file', async ({ page }) => {
   await openImage(page)
   await removeBackground(page)

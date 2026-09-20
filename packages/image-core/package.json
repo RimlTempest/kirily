@@ -8,7 +8,9 @@
     "./composite": "./src/composite.ts",
     "./preview": "./src/preview.ts",
     "./resize": "./src/resize.ts",
-    "./guided": "./src/guided.ts"
+    "./guided": "./src/guided.ts",
+    "./color": "./src/color.ts",
+    "./flood": "./src/flood.ts"
   },
   "scripts": {
     "test": "bun test"

@@ -43,3 +43,37 @@ export type BrushSettings = {
 }
 
 export const DEFAULT_BRUSH: BrushSettings = { size: 32, hardness: 0.8, opacity: 1 }
+
+/**
+ * The bucket: click a region and take the whole thing in or out at once.
+ *
+ * `tolerance` is a perceptual distance in OKLab, not an RGB one. The
+ * difference decides whether the tool is usable on a pale subject against a
+ * pale background — see `packages/image-core/src/color.ts`.
+ */
+export type BucketSettings = {
+  /** 0..1 in OKLab. ~0.02 catches a flat backdrop; ~0.2 is very loose. */
+  readonly tolerance: number
+  /** 0..1. How much of the tolerance band fades rather than filling fully. */
+  readonly feather: number
+  /** False selects every matching pixel, not just the one clicked into. */
+  readonly contiguous: boolean
+}
+
+/**
+ * Measured on `tests/fixtures/pale-subject-on-white.png`, which is the tightest
+ * case the project has:
+ *
+ *   background's own spread   median 0.0026, 99th percentile 0.0070
+ *   white highlight in hair   0.0093   ← the nearest thing that must survive
+ *   skin                      0.0112
+ *
+ * So the usable window is 0.007–0.009. `tolerance` sits inside it, and
+ * `feather` is small because a wide fade over a band this narrow leaves the
+ * background half-selected — which reads as a ghost of the old backdrop.
+ */
+export const DEFAULT_BUCKET: BucketSettings = {
+  tolerance: 0.008,
+  feather: 0.2,
+  contiguous: true,
+}
