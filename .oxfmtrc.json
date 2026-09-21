@@ -17,7 +17,6 @@
     "**/dist/**",
     "**/node_modules/**",
     ".agents/skills/**",
-    ".claude/skills/**",
-    "tests/fixtures/**"
+    ".claude/skills/**"
   ]
 }

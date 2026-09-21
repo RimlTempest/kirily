@@ -33,14 +33,14 @@
 - [x] ONNX Runtime Web + WebGPU、WASM フォールバック
 - [x] 端末能力に応じた 3 段のモデル選択と、失敗時の段階的な降格
 - [x] 重みの分割配信と SHA-256 検証
-- [ ] BiRefNet 段の実機検証（storage buffer 11 以上の GPU が要る）
+- [ ] BiRefNet 段の実機検証（storage buffer 11 以上の GPU が要る。手元の Apple GPU は 10 で、IS-Net 段しか測れていない）
 - [ ] IS-Net の fp16 化（170 MiB → 85 MiB）
 - [x] guided filter による輪郭精緻化（ADR-0008）
 - [x] マスク拡大の Lanczos 化と、縮小時のエイリアス除去
 - [ ] confidence map を使ったエッジ精緻化
 - [ ] マッティング（髪・毛）
 - [ ] 色の除染（`decontaminate_edges` は Rust 側に実装済み、未配線）
-- [ ] 評価データセットと回帰（IoU / Boundary F-score）
+- [x] 評価データセットと回帰（IoU / Boundary F-score / MAE、ADR-0010）
 
 ## M3 — 速度とメモリ
 

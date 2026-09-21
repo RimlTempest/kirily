@@ -8,10 +8,12 @@
     "install-browsers": "playwright install chromium",
     "install-browsers:webkit": "playwright install webkit",
     "report": "playwright show-report",
-    "install-deps": "playwright install-deps chromium"
+    "install-deps": "playwright install-deps chromium",
+    "baselines": "KIRILY_UPDATE_BASELINES=1 playwright test quality.spec.ts --project=desktop"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.11.0",
+    "@kirily/image-core": "workspace:*",
     "@playwright/test": "1.63.0"
   }
 }

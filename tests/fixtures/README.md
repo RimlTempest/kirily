@@ -32,6 +32,23 @@ E2E と視覚的回帰が使う画像。**用途のない画像を置かない**
 > 同意を得ている（2026-09-21）。差し替えが必要になった場合、参照しているのは
 > `tests/e2e/specs/model.spec.ts` だけ。
 
+## `cases.ts` — 合成の評価セット
+
+コミットされた画像ではなく、**実行時に生成する**。正解のアルファが
+被覆率そのもの（4×4 スーパーサンプリング）なので、なぞったマスクと違って
+「モデルの誤差」と「描き手の誤差」が混ざらない。
+
+`tests/e2e/specs/quality.spec.ts` が使い、`tests/e2e/baselines.json` と
+突き合わせる。5 枚それぞれが落とすものは `Case.catches` に書いてある。
+詳細は [ADR-0010](../../docs/adr/0010-quality-evaluation.md)。
+
+基準値を測り直す:
+
+```bash
+bun run --filter @kirily/e2e baselines              # CPU 段
+KIRILY_E2E_WEBGPU=1 bunx playwright test quality.spec.ts --project=desktop-webgpu
+```
+
 ## 追加するときは
 
 - 置き場所は `tests/fixtures/` のみ。lefthook が他の場所への画像コミットを止める

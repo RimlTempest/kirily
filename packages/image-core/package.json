@@ -11,7 +11,8 @@
     "./guided": "./src/guided.ts",
     "./color": "./src/color.ts",
     "./flood": "./src/flood.ts",
-    "./viewport": "./src/viewport.ts"
+    "./viewport": "./src/viewport.ts",
+    "./metrics": "./src/metrics.ts"
   },
   "scripts": {
     "test": "bun test"

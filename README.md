@@ -142,7 +142,14 @@ PC とモバイルの両方で通ります。
 バケツの許容差は RGB ではなく **OKLab** で測ります — 背景と肌が RGB で
 9.4 しか離れていない画像でも、被写体を飲まずに背景だけを取れます。
 
-テスト: TypeScript 234 / Rust 29 / E2E 38（PC + モバイル、+ WebGPU 段 19）。
+テスト: TypeScript 249 / Rust 29 / E2E 48（PC + モバイル、+ WebGPU 段）。
+
+切り抜き品質は点検査ではなく**数値**で押さえています。正解のアルファが
+算術的に分かる合成画像 5 枚に対し、IoU / Boundary F-score / MAE を測って
+`tests/e2e/baselines.json` と突き合わせ、0.02 より下がったら落とします
+（[ADR-0010](docs/adr/0010-quality-evaluation.md)）。最初の測定で、
+高精度段が効いているのは面ではなく**輪郭**だと分かりました
+（細い房の Boundary F 0.961 → 0.993）。
 
 進捗と残りは [docs/roadmap.md](docs/roadmap.md)。
 

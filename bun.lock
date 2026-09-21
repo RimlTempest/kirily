@@ -79,6 +79,7 @@
       "version": "0.1.0",
       "devDependencies": {
         "@axe-core/playwright": "4.11.0",
+        "@kirily/image-core": "workspace:*",
         "@playwright/test": "1.63.0",
       },
     },
