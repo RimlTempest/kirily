@@ -80,5 +80,5 @@
 - [ ] モバイルのボトムシートとジェスチャ
 - [ ] 視覚的回帰テスト
 - [ ] 匿名イベントの計測（画像の内容は送らない）
-- [ ] Cloudflare へのデプロイ（手順と `_headers` は `docs/deploy.md`。実行は未）
+- [ ] Cloudflare へのデプロイ（Workers へ移行済み・`wrangler dev` で E2E 81 件検証済み・手動ワークフローあり。実行は未、ADR-0024）
 - [ ] Lighthouse / axe の CI 化

@@ -2,7 +2,20 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "kirily-web",
   "compatibility_date": "2026-09-21",
-  "pages_build_output_dir": ".svelte-kit/cloudflare",
+
+  // Workers with static assets, not Pages. Pages is in maintenance and takes
+  // no new features; this is where Cloudflare puts them (ADR-0024).
+  //
+  // `main` and `assets.directory` both point into the adapter's output. The
+  // adapter reads this file to decide which of the two shapes to build, and
+  // writes the `.assetsignore` that keeps `_worker.js` from also being served
+  // as a static file.
+  "main": ".svelte-kit/cloudflare/_worker.js",
+  "assets": {
+    "directory": ".svelte-kit/cloudflare",
+    "binding": "ASSETS",
+  },
+
   // R2 / KV / D1 bindings are deliberately absent. The MVP processes images in
   // the browser and stores nothing (kirily-design.md §22, §43). Adding a
   // binding here means the privacy promise on the landing page has to change

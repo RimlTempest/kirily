@@ -18,6 +18,15 @@ import { defineConfig, devices } from '@playwright/test'
  */
 const PORT = 4319
 
+/**
+ * Somewhere already running, instead of a preview server started here.
+ *
+ * `bunx wrangler dev` serves the real Worker with the real asset handling, so
+ * pointing the suite at it is how "this works on Cloudflare" gets checked
+ * without deploying. The same switch aims it at a deployment afterwards.
+ */
+const external = process.env['KIRILY_E2E_URL']
+
 const webkit = process.env['KIRILY_E2E_WEBKIT'] === '1'
 
 /**
@@ -35,7 +44,7 @@ export default defineConfig({
   retries: process.env['CI'] ? 2 : 0,
   reporter: process.env['CI'] ? [['html'], ['github']] : [['list']],
   use: {
-    baseURL: `http://localhost:${PORT}`,
+    baseURL: external ?? `http://localhost:${PORT}`,
     trace: 'on-first-retry',
   },
   projects: [
@@ -54,13 +63,17 @@ export default defineConfig({
       : []),
     ...(webkit ? [{ name: 'mobile-safari', use: { ...devices['iPhone 15'] } }] : []),
   ],
-  webServer: {
-    command: `bun run --filter @kirily/web preview -- --port ${PORT} --strictPort`,
-    url: `http://localhost:${PORT}`,
-    // Reused for speed, which is only safe because the port is ours. On 4173,
-    // Vite's default, a preview server from another project answered and a
-    // whole run went green against somebody else's 404 page.
-    reuseExistingServer: !process.env['CI'],
-    timeout: 120_000,
-  },
+  ...(external === undefined
+    ? {
+        webServer: {
+          command: `bun run --filter @kirily/web preview -- --port ${PORT} --strictPort`,
+          url: `http://localhost:${PORT}`,
+          // Reused for speed, which is only safe because the port is ours. On
+          // 4173, Vite's default, a preview server from another project
+          // answered and a whole run went green against somebody else's 404.
+          reuseExistingServer: !process.env['CI'],
+          timeout: 120_000,
+        },
+      }
+    : {}),
 })

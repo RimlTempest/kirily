@@ -1,0 +1,71 @@
+# 手で起こすデプロイ。push では走らない。
+#
+# 自動にしていないのは、ここが外向きの publish だからである。main が緑なら
+# 出してよい、という判断は人がするもので、緑であることと出す用意があることは
+# 別のことである。
+name: deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Workers の環境名（空なら既定）'
+        required: false
+        type: string
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Cloudflare Workers
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with: { persist-credentials: false }
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+        with: { cache: true }
+      - run: bun install --frozen-lockfile
+
+      # 重みは 198 MiB あって git に入っていない。キーが
+      # fetch-models.ts の中身なので、URL か SHA を変えたときだけ取り直す。
+      - name: cache model weights
+        id: weights
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: apps/web/static/models
+          key: models-${{ hashFiles('tools/fetch-models.ts', 'tools/shard.ts') }}
+
+      - run: bun run models:fetch
+      - run: bun run wasm:build
+
+      # 出す前に一度通す。緑でないものを外に出さない。
+      - run: bun run check
+
+      - run: bun run build
+
+      # モデルを取り忘れたビルドは、落ちずに全員を簡易処理へ落とす。
+      # 静かに悪くなる種類の失敗なので、出す前にここで止める。
+      - name: refuse a build without the weights
+        run: |
+          for id in birefnet-lite isnet-general-use u2netp; do
+            path="apps/web/.svelte-kit/cloudflare/models/$id/manifest.json"
+            if [ ! -f "$path" ]; then
+              echo "::error::$id is missing from the build. Did models:fetch run?"
+              exit 1
+            fi
+          done
+          echo "all three models are in the build"
+
+      - name: deploy
+        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/web
+          command: deploy ${{ inputs.environment && format('--env {0}', inputs.environment) || '' }}
