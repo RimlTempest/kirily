@@ -174,3 +174,46 @@ export const boundaryFScore = (
 /** 0.75% of the diagonal — the DAVIS benchmark's figure. */
 export const defaultTolerance = (size: Size): number =>
   Math.max(1, Math.round(0.0075 * Math.hypot(size.width, size.height)))
+
+/**
+ * How much of the old background is still stuck to the soft edge.
+ *
+ * The three metrics above all read alpha, and alpha can be perfect while every
+ * partially covered pixel still carries the colour it was mixed with. Put that
+ * cut-out on a different background and the old one shows up as a halo.
+ *
+ * Only pixels whose true coverage is in `[LOW, HIGH]` are counted. Outside
+ * that band the comparison says nothing useful: a fully opaque pixel was never
+ * mixed, a fully transparent one is never seen, and a browser's
+ * `getImageData` un-premultiplies, so at alpha 1/255 it amplifies a rounding
+ * error by 255 and would drown the measurement in noise.
+ */
+const LOW = 32
+const HIGH = 223
+
+export const edgeColourError = (
+  predicted: Uint8ClampedArray,
+  truthAlpha: Uint8Array,
+  truthRgb: Uint8Array,
+): Result<number, KirilyError> => {
+  if (predicted.length !== truthAlpha.length * 4 || truthRgb.length !== truthAlpha.length * 3) {
+    return err(
+      kirilyError(
+        KirilyErrorCode.SizeMismatch,
+        `edgeColourError: ${predicted.length} / ${truthAlpha.length} / ${truthRgb.length}`,
+      ),
+    )
+  }
+
+  let total = 0
+  let counted = 0
+  for (let i = 0; i < truthAlpha.length; i += 1) {
+    const coverage = truthAlpha[i] ?? 0
+    if (coverage < LOW || coverage > HIGH) continue
+    counted += 1
+    for (let c = 0; c < 3; c += 1) {
+      total += Math.abs((predicted[i * 4 + c] ?? 0) - (truthRgb[i * 3 + c] ?? 0))
+    }
+  }
+  return ok(counted === 0 ? 0 : total / (counted * 3 * 255))
+}

@@ -12,6 +12,7 @@
    */
   import type { ImagePoint, ScreenPoint, Viewport } from '@kirily/contract/geometry'
   import { screenPoint, toImagePoint } from '@kirily/contract/geometry'
+  import type { BackgroundField } from '@kirily/image-core/decontaminate'
   import type { ColorSource } from '@kirily/image-core/viewport'
   import { renderViewport } from '@kirily/image-core/viewport'
 
@@ -24,6 +25,8 @@
     mask: Uint8Array
     /** Changes whenever the mask changes; used to trigger a redraw. */
     version: number
+    /** The old background, once the AI has measured it. Null disables the correction. */
+    background: BackgroundField | null
     viewport: Viewport
     painting: boolean
     /** True when a single click fills a region instead of painting a stroke. */
@@ -41,6 +44,7 @@
     preview,
     mask,
     version,
+    background,
     viewport,
     painting,
     filling,
@@ -86,13 +90,14 @@
     const previewScale = preview.width / image.width
     const source: ColorSource = viewport.scale > previewScale ? image : preview
 
-    renderViewport(source, mask, image, viewport, size, framebuffer.data)
+    renderViewport(source, mask, image, viewport, size, framebuffer.data, background)
     context.putImageData(framebuffer, 0, 0)
   }
 
   $effect(() => {
     // Re-read each input so the effect runs when any of them changes.
     void version
+    void background
     void viewport
     void size
     void image

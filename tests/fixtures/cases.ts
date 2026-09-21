@@ -22,6 +22,15 @@ export type Case = {
   readonly rgb: Uint8Array
   /** The coverage that produced it: the answer. */
   readonly alpha: Uint8Array
+  /**
+   * The subject's own colour, before it was mixed with the background.
+   *
+   * This is what a correct cut-out has to put behind a partial alpha. Keeping
+   * it is what lets `edgeColourError` see a halo, which the alpha metrics
+   * cannot: a mask can be pixel-perfect and still carry the old background's
+   * colour into every soft edge.
+   */
+  readonly subjectRgb: Uint8Array
 }
 
 /** Coverage is measured by sampling each pixel this many times per axis. */
@@ -114,6 +123,7 @@ const NAMES = ['solid-disc', 'low-contrast', 'thin-strands', 'ring-with-hole', '
 const render = (scene: Scene, name: string): Case => {
   const alpha = new Uint8Array(SIZE * SIZE)
   const rgb = new Uint8Array(SIZE * SIZE * 3)
+  const subjectRgb = new Uint8Array(SIZE * SIZE * 3)
   const step = 1 / SUPERSAMPLE
   const samples = SUPERSAMPLE * SUPERSAMPLE
 
@@ -134,11 +144,12 @@ const render = (scene: Scene, name: string): Case => {
       const back = scene.background(x, y)
       for (let c = 0; c < 3; c += 1) {
         rgb[index * 3 + c] = Math.round((front[c] ?? 0) * a + (back[c] ?? 0) * (1 - a))
+        subjectRgb[index * 3 + c] = front[c] ?? 0
       }
     }
   }
 
-  return { name, catches: scene.catches, width: SIZE, height: SIZE, rgb, alpha }
+  return { name, catches: scene.catches, width: SIZE, height: SIZE, rgb, alpha, subjectRgb }
 }
 
 export const evaluationCases = (): readonly Case[] =>

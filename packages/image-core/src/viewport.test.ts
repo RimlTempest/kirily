@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { estimateBackground } from './decontaminate.ts'
 import { renderViewport } from './viewport.ts'
 
 const IMAGE = { width: 4, height: 4 }
@@ -169,5 +170,35 @@ describe('renderViewport', () => {
       out,
     )
     expect(Array.from(out).every((v) => v === 7)).toBe(true)
+  })
+})
+
+describe('renderViewport with a background field', () => {
+  const image = { width: 2, height: 1 }
+  const viewport = { scale: 1, offsetX: 0, offsetY: 0 }
+  /** Left pixel half covered by white over black; right pixel is that black. */
+  const color = {
+    width: 2,
+    height: 1,
+    rgba: new Uint8ClampedArray([128, 128, 128, 255, 0, 0, 0, 255]),
+  }
+  const mask = new Uint8Array([128, 0])
+
+  test('leaves the soft pixel mixed when no field is given', () => {
+    const out = renderViewport(color, mask, image, viewport, image)
+    expect([out[0], out[1], out[2], out[3]]).toEqual([128, 128, 128, 128])
+  })
+
+  test('gives the soft pixel its own colour back when a field is given', () => {
+    const field = estimateBackground(color.rgba, image, mask, 16)
+    const out = renderViewport(color, mask, image, viewport, image, undefined, field)
+    expect([out[0], out[1], out[2], out[3]]).toEqual([255, 255, 255, 128])
+  })
+
+  test('does not touch a fully opaque pixel', () => {
+    const solid = new Uint8Array([255, 0])
+    const field = estimateBackground(color.rgba, image, solid, 16)
+    const out = renderViewport(color, solid, image, viewport, image, undefined, field)
+    expect([out[0], out[1], out[2], out[3]]).toEqual([128, 128, 128, 255])
   })
 })

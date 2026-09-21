@@ -37,9 +37,9 @@
 - [ ] IS-Net の fp16 化（170 MiB → 85 MiB）
 - [x] guided filter による輪郭精緻化（ADR-0008）
 - [x] マスク拡大の Lanczos 化と、縮小時のエイリアス除去
-- [ ] confidence map を使ったエッジ精緻化
+- [ ] confidence map を使ったエッジ精緻化（モデル解像度の拡大で輪郭に 10px のランプが残る。ADR-0011 で計測済み）
 - [ ] マッティング（髪・毛）
-- [ ] 色の除染（`decontaminate_edges` は Rust 側に実装済み、未配線）
+- [x] 色の除染（背景色を粗いグリッドで推定、プレビューと書き出しの両方、ADR-0011）
 - [x] 評価データセットと回帰（IoU / Boundary F-score / MAE、ADR-0010）
 
 ## M3 — 速度とメモリ

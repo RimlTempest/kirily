@@ -84,42 +84,21 @@ pub fn flatten_onto(rgba: &mut [u8], size: ImageSize, background: Rgb) -> Result
     Ok(())
 }
 
-/// Removes the background's colour cast from semi-transparent edge pixels.
-///
-/// Anti-aliased edges carry a mix of subject and background colour. Dropping
-/// the background without correcting them leaves the familiar halo around hair
-/// and thin objects (kirily-design.md §7.3, "Decontamination").
-pub fn decontaminate_edges(
-    rgba: &mut [u8],
-    size: ImageSize,
-    background: Rgb,
-) -> Result<(), BufferError> {
-    size.validate_rgba(rgba)?;
-
-    for pixel in rgba.as_chunks_mut::<4>().0 {
-        let alpha = pixel[3];
-        // Fully opaque pixels hold no background; fully transparent ones are
-        // never seen. Only the edge band needs correcting.
-        if alpha == 0 || alpha == 255 {
-            continue;
-        }
-        let a = alpha as f32 / 255.0;
-        pixel[0] = unmix(pixel[0], background.r, a);
-        pixel[1] = unmix(pixel[1], background.g, a);
-        pixel[2] = unmix(pixel[2], background.b, a);
-    }
-    Ok(())
-}
+// Decontamination — taking the old background back out of a soft edge — lives
+// only in `image-core`, unlike every other pixel operation here.
+//
+// It needs a per-region estimate of what the background was, not one colour:
+// correcting a whole photograph against a single sample works on a studio
+// backdrop and smears a tint across everything else. That estimate is shared
+// by the renderer, which has no WASM engine, so a Rust copy would be a second
+// implementation of the harder half that only the exporter could reach — and
+// the measured cost does not justify it (20 ms to estimate, 4 ms to apply, at
+// 1254²). See `packages/image-core/src/decontaminate.ts` and ADR-0011.
 
 fn blend(foreground: u8, background: u8, alpha: u32, inverse: u32) -> u8 {
     let value = foreground as u32 * alpha + background as u32 * inverse;
     // +127 then /255 rounds to nearest without a division by 256 bias.
     ((value + 127) / 255) as u8
-}
-
-fn unmix(observed: u8, background: u8, alpha: f32) -> u8 {
-    let recovered = (observed as f32 - background as f32 * (1.0 - alpha)) / alpha;
-    recovered.clamp(0.0, 255.0).round() as u8
 }
 
 #[cfg(test)]
@@ -218,44 +197,5 @@ mod tests {
             "half-transparent black over white is mid grey"
         );
         assert_eq!(rgba[11], 255, "alpha is cleared everywhere");
-    }
-
-    #[test]
-    fn decontamination_recovers_the_subject_colour_at_a_soft_edge() {
-        // A pure red subject at 50% coverage over a white background reads as
-        // (255, 128, 128) on screen. The stored colour should go back to red.
-        let mut rgba = vec![255, 128, 128, 128];
-        decontaminate_edges(
-            &mut rgba,
-            size(1, 1),
-            Rgb {
-                r: 255,
-                g: 255,
-                b: 255,
-            },
-        )
-        .unwrap();
-
-        assert_eq!(rgba[0], 255);
-        assert!(rgba[1] <= 4, "green cast removed, got {}", rgba[1]);
-        assert!(rgba[2] <= 4, "blue cast removed, got {}", rgba[2]);
-        assert_eq!(rgba[3], 128, "alpha is not changed");
-    }
-
-    #[test]
-    fn decontamination_leaves_fully_opaque_and_fully_transparent_pixels_alone() {
-        let original = vec![10, 20, 30, 255, 10, 20, 30, 0];
-        let mut rgba = original.clone();
-        decontaminate_edges(
-            &mut rgba,
-            size(2, 1),
-            Rgb {
-                r: 255,
-                g: 255,
-                b: 255,
-            },
-        )
-        .unwrap();
-        assert_eq!(rgba, original);
     }
 }

@@ -20,7 +20,6 @@ describe('loadImageEngine', () => {
     const engine = await loadImageEngine(async () => ({
       apply_alpha_mask: noop,
       flatten_onto: noop,
-      decontaminate_edges: noop,
       feather_mask: noop,
       refine_mask: noop,
     }))

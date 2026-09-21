@@ -34,6 +34,8 @@ import type { ImageEngine } from '@kirily/wasm'
 import { loadImageEngine } from '@kirily/wasm'
 import { createWorkerProvider, spawnAiWorker } from './ai-client.ts'
 import type { DecodedImage } from './decode.ts'
+import type { BackgroundField } from '@kirily/image-core/decontaminate'
+import { estimateBackground } from '@kirily/image-core/decontaminate'
 import { removeBackground as removeBackgroundFlow } from './remove-background.ts'
 import { decodeFile } from './decode.ts'
 import type { ExportFormat } from './export.ts'
@@ -68,6 +70,16 @@ export const createEditorStore = (
   let fullMask = $state.raw(new Uint8Array(0))
   let maskVersion = $state(0)
 
+  /**
+   * The old background, measured once from the AI's own mask.
+   *
+   * Not recomputed per stroke: it describes the photograph, which does not
+   * change while the user paints, and a full-image scan on every dab would be
+   * the most expensive thing in the editor. Null until the AI has run — a
+   * hand-painted mask gives no basis for saying what was behind the subject.
+   */
+  let backgroundField = $state.raw<BackgroundField | null>(null)
+
   const engineOrLoad = async (): Promise<ImageEngine> => {
     engine ??= await loadImageEngine()
     return engine
@@ -98,6 +110,10 @@ export const createEditorStore = (
     /** Bumped on every mask change so the canvas knows to redraw. */
     get maskVersion(): number {
       return maskVersion
+    },
+    /** The old background, once the AI has measured it. */
+    get background(): BackgroundField | null {
+      return backgroundField
     },
     get viewport(): Viewport {
       return editor?.viewport ?? { scale: 1, offsetX: 0, offsetY: 0 }
@@ -168,6 +184,7 @@ export const createEditorStore = (
 
       editor = withStatus(next.value, { kind: 'idle' })
       recompose()
+      backgroundField = estimateBackground(decoded.rgba, decoded.source, result.value.alpha)
     },
 
     paint: (points: readonly ImagePoint[], mode: BrushMode): void => {
@@ -276,6 +293,7 @@ export const createEditorStore = (
           height: decoded.source.height,
           rgba: decoded.rgba,
           mask: fullMask,
+          background: backgroundField,
         },
         {
           format,
@@ -295,6 +313,7 @@ export const createEditorStore = (
       editor = null
       lastError = null
       fullMask = new Uint8Array(0)
+      backgroundField = null
     },
 
     get lastError(): KirilyError | null {

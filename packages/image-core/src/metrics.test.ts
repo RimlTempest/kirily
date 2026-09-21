@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { KirilyErrorCode } from '@kirily/contract/error'
 import { err, ok } from '@kirily/contract/result'
-import { boundaryFScore, iou, meanAbsoluteError } from './metrics.ts'
+import { boundaryFScore, edgeColourError, iou, meanAbsoluteError } from './metrics.ts'
 
 /** A mask drawn from a string picture: `#` is opaque, `.` is transparent. */
 const draw = (rows: readonly string[]): { mask: Uint8Array; width: number; height: number } => {
@@ -140,5 +140,35 @@ describe('meanAbsoluteError', () => {
     expect(iou(hardened, truth)).toEqual(ok(1))
     const error = meanAbsoluteError(hardened, truth)
     expect(error.ok && error.value).toBeGreaterThan(0.1)
+  })
+})
+
+describe('edgeColourError', () => {
+  /** One pixel at half coverage, one opaque, one transparent. */
+  const truthAlpha = new Uint8Array([128, 255, 0])
+  const truthRgb = new Uint8Array([255, 255, 255, 255, 255, 255, 255, 255, 255])
+
+  test('is 0 when the soft pixel already carries the subject colour', () => {
+    const predicted = new Uint8ClampedArray([255, 255, 255, 128, 255, 255, 255, 255, 0, 0, 0, 0])
+    expect(edgeColourError(predicted, truthAlpha, truthRgb)).toEqual(ok(0))
+  })
+
+  test('sees the background still mixed into the soft pixel', () => {
+    // Half white subject, half black background: the stored colour is 128.
+    const predicted = new Uint8ClampedArray([128, 128, 128, 128, 255, 255, 255, 255, 0, 0, 0, 0])
+    const error = edgeColourError(predicted, truthAlpha, truthRgb)
+    expect(error.ok && error.value).toBeCloseTo(127 / 255, 3)
+  })
+
+  test('ignores pixels that were never mixed, whatever colour they hold', () => {
+    const predicted = new Uint8ClampedArray([255, 255, 255, 128, 0, 0, 0, 255, 9, 9, 9, 0])
+    expect(edgeColourError(predicted, truthAlpha, truthRgb)).toEqual(ok(0))
+  })
+
+  test('is 0 when no pixel falls in the measurable band', () => {
+    const opaque = new Uint8Array([255, 255])
+    expect(
+      edgeColourError(new Uint8ClampedArray(8), opaque, new Uint8Array([0, 0, 0, 0, 0, 0])),
+    ).toEqual(ok(0))
   })
 })

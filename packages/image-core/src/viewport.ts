@@ -13,6 +13,8 @@
  * of the mask in step with the real one on every brush stroke.
  */
 import type { Viewport } from '@kirily/contract/geometry'
+import type { BackgroundField } from './decontaminate.ts'
+import { sampleBackground, unmix } from './decontaminate.ts'
 
 export type Size = { readonly width: number; readonly height: number }
 
@@ -39,6 +41,13 @@ export const renderViewport = (
   viewport: Viewport,
   target: Size,
   out: Uint8ClampedArray = new Uint8ClampedArray(target.width * target.height * 4),
+  /**
+   * When known, the old background is taken back out of the soft edge as it is
+   * drawn. The canvas sits on a checkerboard, so an uncorrected halo is nearly
+   * invisible here and obvious the moment the file is used somewhere else —
+   * which is the worst possible time to find out.
+   */
+  background: BackgroundField | null = null,
 ): Uint8ClampedArray => {
   if (color.rgba.length !== color.width * color.height * 4) return out
   if (mask.length !== image.width * image.height) return out
@@ -78,15 +87,33 @@ export const renderViewport = (
         out[at + 1] = color.rgba[from + 1] ?? 0
         out[at + 2] = color.rgba[from + 2] ?? 0
         out[at + 3] = sampleMaskNearest(mask, image, imageX, imageY)
+        if (background !== null) correct(out, at, background, imageX, imageY)
         continue
       }
 
       sampleColorBilinear(color, cx, cy, out, at)
       out[at + 3] = sampleMaskBilinear(mask, image, imageX, imageY)
+      if (background !== null) correct(out, at, background, imageX, imageY)
     }
   }
 
   return out
+}
+
+const correct = (
+  out: Uint8ClampedArray,
+  at: number,
+  field: BackgroundField,
+  imageX: number,
+  imageY: number,
+): void => {
+  const coverage = out[at + 3] ?? 0
+  if (coverage === 0 || coverage === 255) return
+  const sampled = sampleBackground(field, imageX, imageY)
+  const alpha = coverage / 255
+  for (let channel = 0; channel < 3; channel++) {
+    out[at + channel] = unmix(out[at + channel] ?? 0, sampled[channel] ?? 0, alpha)
+  }
 }
 
 const sampleColorBilinear = (

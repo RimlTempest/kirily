@@ -165,17 +165,3 @@ pub fn refine_mask(
     )
     .map_err(to_js_error)
 }
-
-/// Removes the old background's colour cast from semi-transparent edges.
-#[wasm_bindgen]
-pub fn decontaminate_edges(
-    rgba: &mut [u8],
-    width: u32,
-    height: u32,
-    r: u8,
-    g: u8,
-    b: u8,
-) -> Result<(), JsError> {
-    let size = size_of(width, height)?;
-    kirily_raster::decontaminate_edges(rgba, size, Rgb { r, g, b }).map_err(to_js_error)
-}

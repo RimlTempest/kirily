@@ -12,7 +12,8 @@
     "./color": "./src/color.ts",
     "./flood": "./src/flood.ts",
     "./viewport": "./src/viewport.ts",
-    "./metrics": "./src/metrics.ts"
+    "./metrics": "./src/metrics.ts",
+    "./decontaminate": "./src/decontaminate.ts"
   },
   "scripts": {
     "test": "bun test"

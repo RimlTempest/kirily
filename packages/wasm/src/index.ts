@@ -33,14 +33,6 @@ type WasmModule = {
     g: number,
     b: number,
   ) => void
-  readonly decontaminate_edges: (
-    rgba: Uint8Array,
-    width: number,
-    height: number,
-    r: number,
-    g: number,
-    b: number,
-  ) => void
   readonly feather_mask: (mask: Uint8Array, width: number, height: number, radius: number) => void
   readonly refine_mask: (
     rgba: Uint8Array,
@@ -179,6 +171,5 @@ const isWasmModule = (value: unknown): value is WasmModule =>
   && value !== null
   && typeof Reflect.get(value, 'apply_alpha_mask') === 'function'
   && typeof Reflect.get(value, 'flatten_onto') === 'function'
-  && typeof Reflect.get(value, 'decontaminate_edges') === 'function'
   && typeof Reflect.get(value, 'feather_mask') === 'function'
   && typeof Reflect.get(value, 'refine_mask') === 'function'

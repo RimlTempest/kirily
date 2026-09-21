@@ -144,6 +144,7 @@
           preview={store.image.preview}
           mask={store.mask}
           version={store.maskVersion}
+          background={store.background}
           viewport={store.viewport}
           {painting}
           {filling}

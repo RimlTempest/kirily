@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import {
   boundaryFScore,
   defaultTolerance,
+  edgeColourError,
   iou,
   meanAbsoluteError,
 } from '@kirily/image-core/metrics'
@@ -36,7 +37,7 @@ const BASELINES = fileURLToPath(new URL('../baselines.json', import.meta.url))
 /** How far a score may drift before it counts as a regression. */
 const MARGIN = 0.02
 
-type Scores = { iou: number; boundary: number; mae: number }
+type Scores = { iou: number; boundary: number; mae: number; halo: number }
 /** Project name -> case name -> scores. */
 type Baselines = Record<string, Record<string, Scores>>
 
@@ -52,8 +53,8 @@ const removeBackground = async (page: Page): Promise<string> => {
   return (await tier.textContent()) ?? ''
 }
 
-/** The alpha channel of the exported PNG — the real answer, at full resolution. */
-const exportedAlpha = async (page: Page, size: number): Promise<Uint8Array> => {
+/** The exported PNG's pixels — the real answer, at full resolution. */
+const exported = async (page: Page, size: number): Promise<Uint8ClampedArray> => {
   const download = page.waitForEvent('download')
   await page.getByRole('button', { name: 'PNG で書き出す' }).click()
   const path = await (await download).path()
@@ -68,31 +69,34 @@ const exportedAlpha = async (page: Page, size: number): Promise<Uint8Array> => {
       context.drawImage(bitmap, 0, 0)
       const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height)
 
-      const alpha = new Uint8Array(bitmap.width * bitmap.height)
-      for (let i = 0; i < alpha.length; i += 1) alpha[i] = data[i * 4 + 3] ?? 0
-      // Base64, not an array: 147k numbers as JSON is slower than the encode.
+      // Base64, not an array: 590k numbers as JSON is slower than the encode.
       let binary = ''
-      for (const value of alpha) binary += String.fromCharCode(value)
+      for (const value of data) binary += String.fromCharCode(value)
       return btoa(binary)
     },
     Array.from(await readFile(path)),
   )
 
   const decoded = Buffer.from(encoded, 'base64')
-  expect(decoded.length).toBe(size * size)
-  return new Uint8Array(decoded)
+  expect(decoded.length).toBe(size * size * 4)
+  return new Uint8ClampedArray(decoded)
 }
 
-const score = (predicted: Uint8Array, subject: Case): Scores => {
+const score = (predicted: Uint8ClampedArray, subject: Case): Scores => {
   const size = { width: subject.width, height: subject.height }
-  const overlap = iou(predicted, subject.alpha)
-  const boundary = boundaryFScore(predicted, subject.alpha, size, defaultTolerance(size))
-  const error = meanAbsoluteError(predicted, subject.alpha)
-  expect(overlap.ok && boundary.ok && error.ok).toBe(true)
+  const alpha = new Uint8Array(subject.width * subject.height)
+  for (let i = 0; i < alpha.length; i += 1) alpha[i] = predicted[i * 4 + 3] ?? 0
+
+  const overlap = iou(alpha, subject.alpha)
+  const boundary = boundaryFScore(alpha, subject.alpha, size, defaultTolerance(size))
+  const error = meanAbsoluteError(alpha, subject.alpha)
+  const halo = edgeColourError(predicted, subject.alpha, subject.subjectRgb)
+  expect(overlap.ok && boundary.ok && error.ok && halo.ok).toBe(true)
   return {
     iou: overlap.ok ? overlap.value : 0,
     boundary: boundary.ok ? boundary.value : 0,
     mae: error.ok ? error.value : 1,
+    halo: halo.ok ? halo.value : 1,
   }
 }
 
@@ -130,7 +134,7 @@ test.describe('cutout quality', () => {
       await expect(page.getByLabel('編集中の画像')).toBeVisible()
       const tier = await removeBackground(page)
 
-      const scores = score(await exportedAlpha(page, subject.width), subject)
+      const scores = score(await exported(page, subject.width), subject)
       const project = testInfo.project.name
       recorded[project] = {
         ...recorded[project],
@@ -138,6 +142,7 @@ test.describe('cutout quality', () => {
           iou: round(scores.iou),
           boundary: round(scores.boundary),
           mae: round(scores.mae),
+          halo: round(scores.halo),
         },
       }
       await testInfo.attach(`${subject.name}-scores`, {
@@ -155,6 +160,7 @@ test.describe('cutout quality', () => {
       expect(scores.iou).toBeGreaterThan(baseline.iou - MARGIN)
       expect(scores.boundary).toBeGreaterThan(baseline.boundary - MARGIN)
       expect(scores.mae).toBeLessThan(baseline.mae + MARGIN)
+      expect(scores.halo).toBeLessThan(baseline.halo + MARGIN)
     })
   }
 })

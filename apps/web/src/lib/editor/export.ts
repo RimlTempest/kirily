@@ -11,6 +11,8 @@ import { KirilyErrorCode, kirilyError } from '@kirily/contract/error'
 import type { Result } from '@kirily/contract/result'
 import { err, ok } from '@kirily/contract/result'
 import type { Rgb } from '@kirily/image-core/composite'
+import type { BackgroundField } from '@kirily/image-core/decontaminate'
+import { decontaminate } from '@kirily/image-core/decontaminate'
 import type { ImageEngine } from '@kirily/wasm'
 
 export const ExportFormat = {
@@ -40,6 +42,12 @@ export type ExportSource = {
   readonly rgba: Uint8ClampedArray
   /** The composed mask at original resolution. */
   readonly mask: Uint8Array
+  /**
+   * The old background, as measured when the AI last ran. Without it the soft
+   * edge keeps the colour it was mixed with, which is invisible against the
+   * editor's checkerboard and obvious on someone else's slide.
+   */
+  readonly background: BackgroundField | null
 }
 
 /**
@@ -62,6 +70,13 @@ export const exportImage = async (
   const croppedMask = cropMask(source.mask, source, rect)
   const masked = engine.applyAlphaMask(cropped, croppedMask, rect)
   if (!masked.ok) return masked
+
+  if (source.background !== null) {
+    // After the alpha is in place and before anything reads the colour: the
+    // correction needs the coverage, and JPEG's flatten would bake the halo in.
+    const cleaned = decontaminate(cropped, croppedMask, rect, source.background, rect)
+    if (!cleaned.ok) return cleaned
+  }
 
   if (request.format === ExportFormat.Jpeg) {
     const flattened = engine.flattenOnto(cropped, rect, request.background)
