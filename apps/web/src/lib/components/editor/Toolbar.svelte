@@ -6,6 +6,8 @@
    * accessible rather than two.
    */
   import { ASPECT_PRESETS } from '@kirily/editor-core/crop'
+  import type { EdgeSettings } from '@kirily/image-core/edge'
+  import EdgePanel from './EdgePanel.svelte'
   import { EditorTool } from '@kirily/editor-core/state'
 
   type Props = {
@@ -16,6 +18,8 @@
     guided: boolean
     /** True once a mask exists; without one there is nothing to be guided by. */
     hasMask: boolean
+    edge: EdgeSettings
+    ontrim: () => void
     ratio: number | null
     busy: boolean
     canUndo: boolean
@@ -24,6 +28,7 @@
     onbrushsize: (size: number) => void
     ontolerance: (tolerance: number) => void
     onguided: (guided: boolean) => void
+    onedge: (edge: EdgeSettings) => void
     onratio: (ratio: number | null) => void
     onauto: () => void
     onundo: () => void
@@ -36,6 +41,7 @@
     tolerance,
     guided,
     hasMask,
+    edge,
     ratio,
     busy,
     canUndo,
@@ -44,6 +50,8 @@
     onbrushsize,
     ontolerance,
     onguided,
+    onedge,
+    ontrim,
     onratio,
     onauto,
     onundo,
@@ -106,6 +114,18 @@
         </button>
       {/each}
     </div>
+    {#if hasMask}
+      <!-- Next to the ratios because it *is* a crop: it picks the rectangle
+           the subject actually occupies, which is the one a cut-out almost
+           always wants and nobody wants to drag by hand. -->
+      <button
+        type="button"
+        class="shrink-0 rounded-lg px-2 py-2 text-left text-sm text-ink-muted hover:bg-line md:px-4"
+        onclick={ontrim}
+      >
+        ⤡ 余白を詰める
+      </button>
+    {/if}
   {:else if usingBucket}
     <label class="flex shrink-0 items-center gap-2 px-2 text-sm text-ink-muted md:px-4">
       <span class="whitespace-nowrap">色の幅</span>
@@ -149,6 +169,12 @@
   {/if}
 
   <div class="h-8 w-px shrink-0 bg-line md:h-px md:w-full" role="separator"></div>
+
+  {#if hasMask}
+    <div class="shrink-0 border-t border-line pt-1">
+      <EdgePanel {edge} {onedge} />
+    </div>
+  {/if}
 
   <!-- Labelled, not icon-only: the arrow glyphs render as near-invisible
        hairlines in the system stack, and these are the two controls a user

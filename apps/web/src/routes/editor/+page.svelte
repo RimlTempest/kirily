@@ -214,6 +214,7 @@
           tolerance={store.state.bucket.tolerance}
           guided={store.state.bucket.guided}
           hasMask={store.hasMask}
+          edge={store.edge}
           {ratio}
           {busy}
           canUndo={store.canUndo}
@@ -229,6 +230,8 @@
             store.setBucket({ ...(store.state?.bucket ?? DEFAULT_BUCKET), tolerance: value })}
           onguided={(value) =>
             store.setBucket({ ...(store.state?.bucket ?? DEFAULT_BUCKET), guided: value })}
+          onedge={(value) => store.setEdge(value)}
+          ontrim={() => store.trimToSubject()}
           onratio={(value) => (ratio = value)}
           onauto={() => void store.removeBackground()}
           onundo={() => store.undo()}

@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 import { imagePoint } from '@kirily/contract/geometry'
-import { ASPECT_PRESETS, clampCrop, cropFromDrag, fullCrop, resizeCrop } from './crop.ts'
+import {
+  ASPECT_PRESETS,
+  clampCrop,
+  cropFromDrag,
+  cropToSubject,
+  fullCrop,
+  resizeCrop,
+} from './crop.ts'
 
 const image = { width: 400, height: 300 }
 
@@ -109,5 +116,42 @@ describe('fullCrop', () => {
       width: 640,
       height: 480,
     })
+  })
+})
+
+describe('cropToSubject', () => {
+  const WIDTH = 32
+  const HEIGHT = 32
+  const size = { width: WIDTH, height: HEIGHT }
+
+  /** A mask with a solid block from (8,10) to (19,21). */
+  const block = (): Uint8Array => {
+    const mask = new Uint8Array(WIDTH * HEIGHT)
+    for (let y = 10; y <= 21; y += 1) {
+      for (let x = 8; x <= 19; x += 1) mask[y * WIDTH + x] = 255
+    }
+    return mask
+  }
+
+  test('trims to what is actually visible', () => {
+    expect(cropToSubject(block(), size)).toEqual({ x: 8, y: 10, width: 12, height: 12 })
+  })
+
+  test('ignores alpha too faint to see', () => {
+    const mask = block()
+    mask[0] = 3
+    expect(cropToSubject(mask, size)).toEqual({ x: 8, y: 10, width: 12, height: 12 })
+  })
+
+  test('keeps the whole image when nothing is visible, rather than nothing', () => {
+    expect(cropToSubject(new Uint8Array(WIDTH * HEIGHT), size)).toEqual(fullCrop(size))
+  })
+
+  test('keeps the whole image when the subject reaches every edge', () => {
+    expect(cropToSubject(new Uint8Array(WIDTH * HEIGHT).fill(255), size)).toEqual(fullCrop(size))
+  })
+
+  test('keeps the whole image when the mask does not match it', () => {
+    expect(cropToSubject(new Uint8Array(3), size)).toEqual(fullCrop(size))
   })
 })

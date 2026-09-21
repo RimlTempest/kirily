@@ -114,3 +114,42 @@ export const fullCrop = (image: Size): Rect => ({
   width: image.width,
   height: image.height,
 })
+
+/**
+ * The smallest rectangle that still contains everything visible.
+ *
+ * What a cut-out usually wants next is to stop being mostly empty: the subject
+ * sat in the middle of a photograph, and the transparent margin around it is
+ * now just padding that every later step has to carry.
+ *
+ * `VISIBLE` is deliberately not 1. Refinement and matting leave a scatter of
+ * single-digit alpha well outside the subject, and trimming to those would
+ * trim to nothing (ADR-0021).
+ */
+const VISIBLE = 8
+
+export const cropToSubject = (mask: Uint8Array, image: Size): Rect => {
+  const whole = fullCrop(image)
+  if (mask.length !== image.width * image.height) return whole
+
+  let left = image.width
+  let top = image.height
+  let right = -1
+  let bottom = -1
+
+  for (let y = 0; y < image.height; y += 1) {
+    const row = y * image.width
+    for (let x = 0; x < image.width; x += 1) {
+      if ((mask[row + x] ?? 0) < VISIBLE) continue
+      if (x < left) left = x
+      if (x > right) right = x
+      if (y < top) top = y
+      if (y > bottom) bottom = y
+    }
+  }
+
+  // Nothing visible: an empty rectangle would be a crop the user cannot undo
+  // their way out of by eye.
+  if (right < left || bottom < top) return whole
+  return { x: left, y: top, width: right - left + 1, height: bottom - top + 1 }
+}

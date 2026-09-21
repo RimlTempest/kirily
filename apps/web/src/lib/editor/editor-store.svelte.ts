@@ -26,7 +26,7 @@ import {
 } from '@kirily/editor-core/state'
 import { canRedo, canUndo } from '@kirily/editor-core/history'
 import { resample } from '@kirily/editor-core/commands'
-import { fullCrop } from '@kirily/editor-core/crop'
+import { cropToSubject, fullCrop } from '@kirily/editor-core/crop'
 import { composeMask } from '@kirily/image-core/mask'
 import type { Rgb } from '@kirily/image-core/composite'
 import { budgetFor } from '@kirily/image-core/preview'
@@ -35,6 +35,8 @@ import { loadImageEngine } from '@kirily/wasm'
 import { createWorkerProvider, spawnAiWorker } from './ai-client.ts'
 import type { DecodedImage } from './decode.ts'
 import type { ColourField } from '@kirily/image-core/field'
+import type { EdgeSettings } from '@kirily/image-core/edge'
+import { DEFAULT_EDGE, adjustEdge, clampEdge, isNeutral } from '@kirily/image-core/edge'
 import type { Stage, Timings } from '@kirily/contract/timing'
 import { Stage as Stages, createStopwatch, replayTimings } from '@kirily/contract/timing'
 import { removeBackground as removeBackgroundFlow } from './remove-background.ts'
@@ -95,6 +97,13 @@ export const createEditorStore = (
   let exportSettings = $state.raw<ExportSettings>(DEFAULT_EXPORT)
 
   /**
+   * A view of the mask, not an edit to it — the same standing as the crop.
+   * Applied while composing, so the renderer and the exporter see one thing
+   * and undo has nothing to do with it.
+   */
+  let edge = $state.raw<EdgeSettings>(DEFAULT_EDGE)
+
+  /**
    * Where the time went, for the run the user is looking at.
    *
    * "The AI is slow" and "the encoder is slow" need opposite work and look
@@ -123,6 +132,7 @@ export const createEditorStore = (
   const recompose = (): void => {
     if (editor === null) return
     composeMask(editor.mask, fullMask)
+    if (!isNeutral(edge)) adjustEdge(fullMask, editor.mask, edge)
     maskVersion += 1
   }
 
@@ -149,6 +159,23 @@ export const createEditorStore = (
     /** The old background, once the AI has measured it. */
     get background(): ColourField | null {
       return backgroundField
+    },
+    get edge(): EdgeSettings {
+      return edge
+    },
+    setEdge(next: EdgeSettings): void {
+      edge = clampEdge(next)
+      recompose()
+    },
+    /** Trims the crop to what is actually visible. */
+    trimToSubject(): void {
+      if (editor === null || decoded === null) return
+      const next = dispatch(editor, {
+        kind: 'set-crop',
+        rect: cropToSubject(fullMask, decoded.source),
+      })
+      if (!next.ok) return fail(next.error)
+      editor = next.value
     },
     /** True once the AI has produced a mask, so the bucket has something to follow. */
     get hasMask(): boolean {
