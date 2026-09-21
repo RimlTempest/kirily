@@ -13,7 +13,12 @@
   import Toolbar from '$lib/components/editor/Toolbar.svelte'
   import { createEditorStore } from '$lib/editor/editor-store.svelte.ts'
   import ExportPanel from '$lib/components/editor/ExportPanel.svelte'
-  import { needsBackground, toHex } from '$lib/editor/export-settings.ts'
+  import {
+    Backdrop as BackdropKind,
+    effectiveBackdrop,
+    toHex,
+  } from '$lib/editor/export-settings.ts'
+  import { imageFrom } from '$lib/editor/clipboard.ts'
   import { pendingFile } from '$lib/editor/pending-file.svelte.ts'
 
   const store = createEditorStore()
@@ -24,9 +29,54 @@
    * otherwise the colour is picked blind and the preview stops matching the
    * file.
    */
+  const behind = $derived(effectiveBackdrop(store.exportSettings))
   const exportBackdrop = $derived(
-    needsBackground(store.exportSettings.format) ? toHex(store.exportSettings.background) : null,
+    behind === BackdropKind.Colour ? toHex(store.exportSettings.background) : null,
   )
+
+  /**
+   * An object URL for the chosen backdrop, revoked when it changes.
+   *
+   * The pixels are already decoded in the store; this is only so CSS can draw
+   * them. Re-encoding to PNG once per choice is cheaper than a second decode
+   * on every frame.
+   */
+  let backdropUrl = $state<string | null>(null)
+  $effect(() => {
+    const image = behind === BackdropKind.Image ? store.backdropImage : null
+    if (image === null) {
+      backdropUrl = null
+      return
+    }
+    const canvas = new OffscreenCanvas(image.width, image.height)
+    const context = canvas.getContext('2d')
+    if (context === null) return
+    context.putImageData(new ImageData(image.rgba, image.width, image.height), 0, 0)
+
+    let url: string | null = null
+    void canvas.convertToBlob({ type: 'image/png' }).then((blob) => {
+      url = URL.createObjectURL(blob)
+      backdropUrl = url
+      return url
+    })
+    return () => {
+      if (url !== null) URL.revokeObjectURL(url)
+      backdropUrl = null
+    }
+  })
+
+  /** Where the image sits inside the canvas, for the backdrop to cover. */
+  const imageFrame = $derived.by(() => {
+    if (store.image === null) return null
+    const { width, height } = store.image.source
+    const view = store.viewport
+    return {
+      x: view.offsetX,
+      y: view.offsetY,
+      width: width * view.scale,
+      height: height * view.scale,
+    }
+  })
 
   /**
    * Read once, on mount. A developer's instrument: it stays off unless asked
@@ -39,6 +89,24 @@
     const query = new URLSearchParams(globalThis.location.search)
     showTimings = query.get('timings') === '1'
     forceCanvas = query.get('renderer') === 'canvas'
+
+    /**
+     * A paste opens the image, the way a drop does.
+     *
+     * Listened for on the document rather than behind a button: a screenshot
+     * on the clipboard and Cmd+V is how this gets used, and the paste event
+     * carries the file without asking for a permission.
+     */
+    const onPaste = (event: ClipboardEvent): void => {
+      const items = event.clipboardData?.items
+      if (items === undefined) return
+      const file = imageFrom([...items])
+      if (file === null) return
+      event.preventDefault()
+      void store.open(file)
+    }
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
   })
 
   let tool = $state<EditorTool>(EditorTool.BrushRemove)
@@ -175,6 +243,8 @@
           background={store.background}
           onrendered={(ms) => store.recordRender(ms)}
           backdrop={exportBackdrop}
+          {backdropUrl}
+          imageRect={imageFrame}
           {forceCanvas}
           viewport={store.viewport}
           {painting}
@@ -253,6 +323,11 @@
         onformat={(format) => store.setExportFormat(format)}
         onquality={(quality) => store.setExportQuality(quality)}
         onbackground={(background) => store.setExportBackground(background)}
+        hasBackdropImage={store.backdropImage !== null}
+        canCopy={store.canCopy}
+        onbackdrop={(backdrop) => store.setBackdrop(backdrop)}
+        onbackdropimage={(file) => void store.chooseBackdrop(file)}
+        oncopy={() => void store.copy()}
         onexport={() => void store.download()}
       />
     </footer>

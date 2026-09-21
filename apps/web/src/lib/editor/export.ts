@@ -11,6 +11,8 @@ import { KirilyErrorCode, kirilyError } from '@kirily/contract/error'
 import type { Result } from '@kirily/contract/result'
 import { err, ok } from '@kirily/contract/result'
 import type { Rgb } from '@kirily/image-core/composite'
+import type { Backdrop } from '@kirily/image-core/backdrop'
+import { compositeBackdrop } from '@kirily/image-core/backdrop'
 import { decontaminate } from '@kirily/image-core/decontaminate'
 import type { ColourField } from '@kirily/image-core/field'
 import type { ImageEngine } from '@kirily/wasm'
@@ -30,8 +32,12 @@ export type ExportRequest = {
   readonly format: ExportFormat
   /** 0..1. Ignored for PNG, which is lossless. */
   readonly quality: number
-  /** Where transparency goes for JPEG, which has no alpha channel. */
+  /** Where transparency goes: a flat colour, unless `backdrop` supplies pixels. */
   readonly background: Rgb
+  /** An image to put behind the cut-out, framed to cover the whole picture. */
+  readonly backdrop: Backdrop | null
+  /** True to flatten onto `background` even in a format that could keep alpha. */
+  readonly flatten: boolean
   readonly rect: Rect
 }
 
@@ -78,7 +84,12 @@ export const exportImage = async (
     if (!cleaned.ok) return cleaned
   }
 
-  if (request.format === ExportFormat.Jpeg) {
+  // Ordered so each step sees what it needs: the alpha has to be in place for
+  // the correction, the correction has to be done before anything reads the
+  // colour, and flattening throws the alpha away so it goes last.
+  if (request.backdrop !== null) {
+    compositeBackdrop(cropped, rect, request.backdrop, rect, source)
+  } else if (request.flatten || request.format === ExportFormat.Jpeg) {
     const flattened = engine.flattenOnto(cropped, rect, request.background)
     if (!flattened.ok) return flattened
   }

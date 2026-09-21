@@ -32,7 +32,9 @@ const readPixels = (
   bitmap: ImageBitmap,
   width: number,
   height: number,
-): Result<Uint8ClampedArray, KirilyError> => {
+  // Not `ArrayBufferLike`: a canvas never hands back a shared buffer, and
+  // saying so is what lets these pixels go to `ImageData` without an assertion.
+): Result<Uint8ClampedArray<ArrayBuffer>, KirilyError> => {
   const canvas = new OffscreenCanvas(width, height)
   const context = canvas.getContext('2d', { willReadFrequently: true })
   if (context === null) {
@@ -93,4 +95,32 @@ export const decodeFile = async (
     rgba: full.value,
     preview: { width: previewSize.width, height: previewSize.height, rgba: preview.value },
   })
+}
+
+/**
+ * Decodes a picture to put behind the cut-out.
+ *
+ * Separate from `decodeFile` because it answers to nothing: it is not the
+ * thing being edited, so it has no preview, no size budget beyond what the
+ * browser will decode, and no `SourceImage` describing it. The only thing that
+ * matters is its pixels and its shape.
+ */
+export const decodeBackdrop = async (
+  file: File,
+): Promise<
+  Result<{ rgba: Uint8ClampedArray<ArrayBuffer>; width: number; height: number }, KirilyError>
+> => {
+  let bitmap: ImageBitmap
+  try {
+    bitmap = await createImageBitmap(file)
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : 'unknown'
+    return err(kirilyError(KirilyErrorCode.ImageDecodeFailed, detail))
+  }
+
+  const pixels = readPixels(bitmap, bitmap.width, bitmap.height)
+  const size = { width: bitmap.width, height: bitmap.height }
+  bitmap.close()
+  if (!pixels.ok) return pixels
+  return ok({ rgba: pixels.value, ...size })
 }

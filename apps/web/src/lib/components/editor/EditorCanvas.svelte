@@ -53,6 +53,17 @@
      * (kirily-design.md §16).
      */
     backdrop?: string | null
+    /**
+     * A picture to show behind, as an object URL, framed to cover the image.
+     *
+     * Drawn as the frame's CSS background rather than through the renderer.
+     * The browser's `cover` is the same framing `coverTransform` computes, and
+     * a backdrop is the one layer where its resampling standing in for ours
+     * changes nothing a user can judge (ADR-0022).
+     */
+    backdropUrl?: string | null
+    /** Where the image sits in the frame, so the backdrop covers the same rectangle. */
+    imageRect?: { x: number; y: number; width: number; height: number } | null
   }
 
   const {
@@ -73,6 +84,8 @@
     onrendered,
     forceCanvas = false,
     backdrop = null,
+    backdropUrl = null,
+    imageRect = null,
   }: Props = $props()
 
   let canvas: HTMLCanvasElement | null = $state(null)
@@ -283,9 +296,19 @@
 <div
   bind:this={frame}
   class="absolute inset-0 overflow-hidden rounded-[var(--radius-panel)]"
-  class:checkerboard={backdrop === null}
+  class:checkerboard={backdrop === null && backdropUrl === null}
   style:background={backdrop ?? undefined}
 >
+  {#if backdropUrl !== null && imageRect !== null}
+    <div
+      class="pointer-events-none absolute bg-cover bg-center"
+      style:left={`${imageRect.x}px`}
+      style:top={`${imageRect.y}px`}
+      style:width={`${imageRect.width}px`}
+      style:height={`${imageRect.height}px`}
+      style:background-image={`url(${backdropUrl})`}
+    ></div>
+  {/if}
   <canvas
     bind:this={canvas}
     width={size.width}

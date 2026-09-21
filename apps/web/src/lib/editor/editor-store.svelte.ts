@@ -40,11 +40,21 @@ import { DEFAULT_EDGE, adjustEdge, clampEdge, isNeutral } from '@kirily/image-co
 import type { Stage, Timings } from '@kirily/contract/timing'
 import { Stage as Stages, createStopwatch, replayTimings } from '@kirily/contract/timing'
 import { removeBackground as removeBackgroundFlow } from './remove-background.ts'
-import { decodeFile } from './decode.ts'
+import { decodeBackdrop, decodeFile } from './decode.ts'
 import type { ExportFormat } from './export.ts'
+import { canCopy, writeImage } from './clipboard.ts'
 import { downloadBlob, exportImage, extensionFor } from './export.ts'
-import type { ExportSettings } from './export-settings.ts'
-import { DEFAULT_EXPORT, withBackground, withFormat, withQuality } from './export-settings.ts'
+import type { Backdrop as BackdropImage } from '@kirily/image-core/backdrop'
+import type { Backdrop, ExportSettings } from './export-settings.ts'
+import {
+  Backdrop as Backdrops,
+  DEFAULT_EXPORT,
+  effectiveBackdrop,
+  withBackdrop,
+  withBackground,
+  withFormat,
+  withQuality,
+} from './export-settings.ts'
 
 export type EditorStore = ReturnType<typeof createEditorStore>
 
@@ -103,6 +113,9 @@ export const createEditorStore = (
    */
   let edge = $state.raw<EdgeSettings>(DEFAULT_EDGE)
 
+  /** The picture chosen to go behind, decoded once and kept. */
+  let backdropImage = $state.raw<BackdropImage | null>(null)
+
   /**
    * Where the time went, for the run the user is looking at.
    *
@@ -134,6 +147,46 @@ export const createEditorStore = (
     composeMask(editor.mask, fullMask)
     if (!isNeutral(edge)) adjustEdge(fullMask, editor.mask, edge)
     maskVersion += 1
+  }
+
+  /**
+   * Encodes what is on screen, once, for whoever asked.
+   *
+   * Download and copy differ only in where the blob goes, and having them
+   * share this is what stops one of them quietly getting a different picture.
+   */
+  const render = async (): Promise<Blob | null> => {
+    if (editor === null || decoded === null) return null
+    editor = withStatus(editor, { kind: 'exporting' })
+
+    // The engine is loaded outside the measurement: on a first export that
+    // is a WASM compile, and folding it in would make encoding look slow.
+    const ready = await engineOrLoad()
+    const behind = effectiveBackdrop(exportSettings)
+    const source = {
+      width: decoded.source.width,
+      height: decoded.source.height,
+      rgba: decoded.rgba,
+      mask: fullMask,
+      background: backgroundField,
+    }
+    const request = {
+      format: exportSettings.format,
+      quality: exportSettings.quality,
+      background: exportSettings.background,
+      backdrop: behind === Backdrops.Image ? backdropImage : null,
+      flatten: behind === Backdrops.Colour,
+      rect: exportRect(editor),
+    }
+    const result = await clock.measureAsync(Stages.Export, () =>
+      exportImage(ready, source, request),
+    )
+    timings = clock.timings()
+    if (!result.ok) {
+      fail(result.error)
+      return null
+    }
+    return result.value
   }
 
   const fail = (error: KirilyError): void => {
@@ -201,6 +254,22 @@ export const createEditorStore = (
     },
     setExportBackground(background: Rgb): void {
       exportSettings = withBackground(exportSettings, background)
+    },
+    setBackdrop(backdrop: Backdrop): void {
+      exportSettings = withBackdrop(exportSettings, backdrop)
+    },
+    get backdropImage(): BackdropImage | null {
+      return backdropImage
+    },
+    /** Decodes a picture to put behind, and switches to it. */
+    chooseBackdrop: async (file: File): Promise<void> => {
+      const decodedBackdrop = await decodeBackdrop(file)
+      if (!decodedBackdrop.ok) {
+        lastError = decodedBackdrop.error
+        return
+      }
+      backdropImage = decodedBackdrop.value
+      exportSettings = withBackdrop(exportSettings, Backdrops.Image)
     },
     get viewport(): Viewport {
       return editor?.viewport ?? { scale: 1, offsetX: 0, offsetY: 0 }
@@ -376,34 +445,25 @@ export const createEditorStore = (
       recompose()
     },
 
+    /** True when this browser will let the result be copied. */
+    get canCopy(): boolean {
+      return canCopy()
+    },
+
+    /** Encodes and puts the result on the clipboard instead of on disk. */
+    copy: async (): Promise<void> => {
+      const encoded = await render()
+      if (encoded === null) return
+      const written = await writeImage(encoded)
+      if (!written.ok) return fail(written.error)
+      if (editor !== null) editor = withStatus(editor, { kind: 'idle' })
+    },
+
     download: async (): Promise<void> => {
-      if (editor === null || decoded === null) return
       const { format } = exportSettings
-      editor = withStatus(editor, { kind: 'exporting' })
-
-      // The engine is loaded outside the measurement: on a first export that
-      // is a WASM compile, and folding it in would make encoding look slow.
-      const ready = await engineOrLoad()
-      const source = {
-        width: decoded.source.width,
-        height: decoded.source.height,
-        rgba: decoded.rgba,
-        mask: fullMask,
-        background: backgroundField,
-      }
-      const request = {
-        format,
-        quality: exportSettings.quality,
-        background: exportSettings.background,
-        rect: exportRect(editor),
-      }
-      const result = await clock.measureAsync(Stages.Export, () =>
-        exportImage(ready, source, request),
-      )
-      timings = clock.timings()
-      if (!result.ok) return fail(result.error)
-
-      downloadBlob(result.value, exportFileName(decoded.source.fileName, extensionFor(format)))
+      const encoded = await render()
+      if (encoded === null || decoded === null || editor === null) return
+      downloadBlob(encoded, exportFileName(decoded.source.fileName, extensionFor(format)))
       editor = withStatus(editor, { kind: 'idle' })
     },
 
@@ -413,6 +473,7 @@ export const createEditorStore = (
       lastError = null
       fullMask = new Uint8Array(0)
       backgroundField = null
+      backdropImage = null
     },
 
     get lastError(): KirilyError | null {

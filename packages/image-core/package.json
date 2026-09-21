@@ -18,7 +18,8 @@
     "./matte": "./src/matte.ts",
     "./select": "./src/select.ts",
     "./edge": "./src/edge.ts",
-    "./blur": "./src/blur.ts"
+    "./blur": "./src/blur.ts",
+    "./backdrop": "./src/backdrop.ts"
   },
   "scripts": {
     "test": "bun test"

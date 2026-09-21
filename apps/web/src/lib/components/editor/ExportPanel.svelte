@@ -13,9 +13,11 @@
    */
   import type { Rgb } from '@kirily/image-core/composite'
   import { ExportFormat } from '$lib/editor/export.ts'
-  import type { ExportSettings } from '$lib/editor/export-settings.ts'
+  import type { Backdrop, ExportSettings } from '$lib/editor/export-settings.ts'
   import {
     BACKGROUND_PRESETS,
+    Backdrop as Backdrops,
+    effectiveBackdrop,
     fromHex,
     isLossy,
     needsBackground,
@@ -25,13 +27,31 @@
   type Props = {
     settings: ExportSettings
     busy: boolean
+    /** True once a picture has been chosen to go behind. */
+    hasBackdropImage: boolean
+    canCopy: boolean
     onformat: (format: ExportFormat) => void
     onquality: (quality: number) => void
     onbackground: (background: Rgb) => void
+    onbackdrop: (backdrop: Backdrop) => void
+    onbackdropimage: (file: File) => void
     onexport: () => void
+    oncopy: () => void
   }
 
-  const { settings, busy, onformat, onquality, onbackground, onexport }: Props = $props()
+  const {
+    settings,
+    busy,
+    hasBackdropImage,
+    canCopy,
+    onformat,
+    onquality,
+    onbackground,
+    onbackdrop,
+    onbackdropimage,
+    onexport,
+    oncopy,
+  }: Props = $props()
 
   const FORMATS: readonly { readonly value: ExportFormat; readonly label: string }[] = [
     { value: ExportFormat.Png, label: 'PNG' },
@@ -41,7 +61,10 @@
 
   const label = $derived(FORMATS.find((entry) => entry.value === settings.format)?.label ?? 'PNG')
   const lossy = $derived(isLossy(settings.format))
-  const flattens = $derived(needsBackground(settings.format))
+  const behind = $derived(effectiveBackdrop(settings))
+  const flattens = $derived(behind === Backdrops.Colour)
+  // JPEG cannot keep the transparency, so offering it is offering nothing.
+  const canKeepAlpha = $derived(!needsBackground(settings.format))
   const percent = $derived(Math.round(settings.quality * 100))
 
   const same = (a: Rgb, b: Rgb): boolean => a.r === b.r && a.g === b.g && a.b === b.b
@@ -50,6 +73,18 @@
     const target = event.currentTarget
     if (target instanceof HTMLInputElement) onbackground(fromHex(target.value, settings.background))
   }
+
+  const readFile = (event: Event): void => {
+    const target = event.currentTarget
+    const file = target instanceof HTMLInputElement ? target.files?.[0] : undefined
+    if (file !== undefined) onbackdropimage(file)
+  }
+
+  const BACKDROPS: readonly { readonly value: Backdrop; readonly label: string }[] = [
+    { value: Backdrops.None, label: 'なし' },
+    { value: Backdrops.Colour, label: '色' },
+    { value: Backdrops.Image, label: '画像' },
+  ]
 </script>
 
 <div class="flex flex-wrap items-center justify-end gap-3">
@@ -88,10 +123,42 @@
     </label>
   {/if}
 
+  <div role="group" aria-label="背後に敷くもの" class="flex items-center gap-1 text-xs">
+    <span class="text-ink-muted">背景</span>
+    {#each BACKDROPS as choice (choice.value)}
+      <!-- "なし" disappears for JPEG rather than going grey: a format that
+           cannot keep transparency is not refusing, it has no such thing. -->
+      {#if choice.value !== Backdrops.None || canKeepAlpha}
+        <button
+          type="button"
+          class="rounded-full px-2 py-1 {behind === choice.value
+            ? 'bg-accent font-bold text-surface'
+            : 'text-ink-muted hover:bg-line'}"
+          aria-pressed={behind === choice.value}
+          onclick={() => onbackdrop(choice.value)}
+        >
+          {choice.label}
+        </button>
+      {/if}
+    {/each}
+  </div>
+
+  {#if behind === Backdrops.Image}
+    <label
+      class="cursor-pointer rounded-full bg-surface-raised px-3 py-1.5 text-xs text-ink-muted hover:bg-line"
+    >
+      {hasBackdropImage ? '画像を変える' : '画像を選ぶ'}
+      <input
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        class="sr-only"
+        onchange={readFile}
+      />
+    </label>
+  {/if}
+
   {#if flattens}
     <div role="group" aria-label="透明部分の色" class="flex items-center gap-1 text-xs">
-      <!-- JPEG has no alpha, so the cut-out is about to be composited onto
-           this. Saying so is shorter than explaining why it looks different. -->
       <span class="text-ink-muted">透明部分</span>
       {#each BACKGROUND_PRESETS as preset (preset.label)}
         <button
@@ -113,6 +180,17 @@
         oninput={readColour}
       />
     </div>
+  {/if}
+
+  {#if canCopy}
+    <button
+      type="button"
+      class="rounded-full bg-surface-raised px-4 py-3 text-sm text-ink transition-opacity hover:opacity-85 disabled:opacity-50"
+      disabled={busy}
+      onclick={oncopy}
+    >
+      ⧉ コピー
+    </button>
   {/if}
 
   <button

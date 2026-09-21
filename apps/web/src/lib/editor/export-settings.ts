@@ -14,11 +14,22 @@ import type { Rgb } from '@kirily/image-core/composite'
 import { BLACK, WHITE } from '@kirily/image-core/composite'
 import { ExportFormat } from './export.ts'
 
+/** What goes behind the cut-out. */
+export const Backdrop = {
+  /** Keep the transparency. Not available to JPEG, which has no alpha. */
+  None: 'none',
+  Colour: 'colour',
+  Image: 'image',
+} as const
+
+export type Backdrop = (typeof Backdrop)[keyof typeof Backdrop]
+
 export type ExportSettings = {
   readonly format: ExportFormat
   /** 0..1. Ignored by PNG. */
   readonly quality: number
-  /** Where transparency goes. Only JPEG uses it. */
+  readonly backdrop: Backdrop
+  /** Used when the backdrop is a colour, and by JPEG whatever is chosen. */
   readonly background: Rgb
 }
 
@@ -29,6 +40,7 @@ export const DEFAULT_EXPORT: ExportSettings = {
   // High enough that the difference is hard to see on a cut-out edge, low
   // enough to be worth choosing a lossy format for at all.
   quality: 0.92,
+  backdrop: Backdrop.None,
   background: WHITE,
 }
 
@@ -36,6 +48,23 @@ export const isLossy = (format: ExportFormat): boolean => format !== ExportForma
 
 /** JPEG has no alpha channel, so something has to be decided for it. */
 export const needsBackground = (format: ExportFormat): boolean => format === ExportFormat.Jpeg
+
+/**
+ * What will actually go behind, once the format has had its say.
+ *
+ * JPEG cannot keep transparency, so asking for none gets a colour anyway.
+ * Saying so here rather than at three call sites is what stops the preview
+ * and the export disagreeing about it.
+ */
+export const effectiveBackdrop = (settings: ExportSettings): Backdrop =>
+  settings.backdrop === Backdrop.None && needsBackground(settings.format)
+    ? Backdrop.Colour
+    : settings.backdrop
+
+export const withBackdrop = (settings: ExportSettings, backdrop: Backdrop): ExportSettings => ({
+  ...settings,
+  backdrop,
+})
 
 export const carriesAlpha = (format: ExportFormat): boolean => format !== ExportFormat.Jpeg
 

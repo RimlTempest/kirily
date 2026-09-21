@@ -3,15 +3,18 @@ import { WHITE } from '@kirily/image-core/composite'
 import { ExportFormat } from './export.ts'
 import {
   BACKGROUND_PRESETS,
+  Backdrop,
   DEFAULT_EXPORT,
   carriesAlpha,
+  effectiveBackdrop,
+  fromHex,
   isLossy,
   needsBackground,
+  toHex,
+  withBackdrop,
   withBackground,
   withFormat,
   withQuality,
-  toHex,
-  fromHex,
 } from './export-settings.ts'
 
 describe('what each format needs', () => {
@@ -86,5 +89,34 @@ describe('hex', () => {
   test('keeps the current colour when the text is not one', () => {
     expect(fromHex('red', WHITE)).toEqual(WHITE)
     expect(fromHex('#12345', WHITE)).toEqual(WHITE)
+  })
+})
+
+describe('what goes behind', () => {
+  test('nothing, by default', () => {
+    expect(DEFAULT_EXPORT.backdrop).toBe(Backdrop.None)
+  })
+
+  test('PNG and WebP can keep the transparency', () => {
+    expect(effectiveBackdrop({ ...DEFAULT_EXPORT, format: ExportFormat.Png })).toBe(Backdrop.None)
+    expect(effectiveBackdrop({ ...DEFAULT_EXPORT, format: ExportFormat.WebP })).toBe(Backdrop.None)
+  })
+
+  /** JPEG has no alpha, so "none" is not an answer it can accept. */
+  test('JPEG gets a colour even when none was asked for', () => {
+    expect(effectiveBackdrop({ ...DEFAULT_EXPORT, format: ExportFormat.Jpeg })).toBe(
+      Backdrop.Colour,
+    )
+  })
+
+  test('an image behind stays an image behind, whatever the format', () => {
+    const chosen = withBackdrop(DEFAULT_EXPORT, Backdrop.Image)
+    expect(effectiveBackdrop({ ...chosen, format: ExportFormat.Jpeg })).toBe(Backdrop.Image)
+    expect(effectiveBackdrop({ ...chosen, format: ExportFormat.Png })).toBe(Backdrop.Image)
+  })
+
+  test('switching format keeps what was chosen to go behind', () => {
+    const chosen = withBackdrop(DEFAULT_EXPORT, Backdrop.Colour)
+    expect(withFormat(chosen, ExportFormat.WebP).backdrop).toBe(Backdrop.Colour)
   })
 })
