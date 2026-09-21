@@ -17,6 +17,12 @@ export const Stage = {
   Preview: 'preview',
   /** Fetching, verifying and compiling the model. Zero once it is cached. */
   AiLoad: 'ai_load',
+  /** Pulling the shards over the wire. */
+  AiFetch: 'ai_fetch',
+  /** SHA-256 over the reassembled weights. */
+  AiVerify: 'ai_verify',
+  /** Handing the bytes to the runtime and building the session. */
+  AiCompile: 'ai_compile',
   /** The forward pass itself. */
   AiInference: 'ai_inference',
   /** Guided filter, pulling the mask's edge onto the image's. */

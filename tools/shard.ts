@@ -18,6 +18,7 @@ export const sha256 = (bytes: Uint8Array): string =>
 
 export type ShardResult = {
   readonly shards: readonly string[]
+  readonly shardBytes: readonly number[]
   readonly sha256: string
 }
 
@@ -37,19 +38,21 @@ export const publishSharded = async (
   await mkdir(dir, { recursive: true })
 
   const shards: string[] = []
+  const shardBytes: number[] = []
   for (let offset = 0, index = 0; offset < bytes.length; offset += SHARD_BYTES, index++) {
     const name = `${id}.${extension}.${String(index).padStart(3, '0')}`
     await writeFile(join(dir, name), bytes.subarray(offset, offset + SHARD_BYTES))
     shards.push(name)
+    shardBytes.push(Math.min(SHARD_BYTES, bytes.length - offset))
   }
 
   const digest = sha256(bytes)
   await writeFile(
     join(dir, 'manifest.json'),
-    `${JSON.stringify({ id, bytes: bytes.length, sha256: digest, shards, ...extra }, null, 2)}\n`,
+    `${JSON.stringify({ id, bytes: bytes.length, sha256: digest, shards, shardBytes, ...extra }, null, 2)}\n`,
   )
 
-  return { shards, sha256: digest }
+  return { shards, shardBytes, sha256: digest }
 }
 
 export const mib = (bytes: number): string => (bytes / 1024 / 1024).toFixed(1)

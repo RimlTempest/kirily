@@ -26,6 +26,7 @@ const manifest = {
   bytes: WEIGHTS.length,
   sha256: WEIGHTS_SHA,
   shards: ['weights.000'],
+  shardBytes: [WEIGHTS.length],
 }
 
 const respond = (body: unknown): Response =>

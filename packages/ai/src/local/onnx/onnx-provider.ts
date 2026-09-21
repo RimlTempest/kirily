@@ -14,7 +14,11 @@ import type { BackgroundRemovalProvider, ImageInput, SegmentationResult } from '
 import type { ModelSpec } from './model-spec.ts'
 import { toAlphaMask, toInputTensor } from './tensor.ts'
 import type { LoadWeightsDeps } from './weights.ts'
+import { Stage } from '@kirily/contract/timing'
 import { loadWeights } from './weights.ts'
+
+/** `performance` exists in workers and in Node; a missing one must not break loading. */
+const now = (): number => (typeof performance === 'undefined' ? 0 : performance.now())
 
 /** The slice of an inference session this provider needs. */
 export type Session = {
@@ -62,9 +66,11 @@ export const createOnnxProvider = (
       })
       if (!weights.ok) return weights
 
+      const startedCompile = now()
       const created = await deps.createSession(weights.value, spec, (fraction) => {
         onProgress?.(0.7 + fraction * 0.3)
       })
+      deps.record?.(Stage.AiCompile, now() - startedCompile)
       if (!created.ok) return created
 
       session = created.value

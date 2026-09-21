@@ -75,6 +75,9 @@ const alreadyPublished = async (model: ModelSource): Promise<boolean> => {
 
   const manifest: unknown = await file.json().catch(() => null)
   if (typeof manifest !== 'object' || manifest === null) return false
+  // A manifest from before per-shard sizes cannot be loaded, so a matching
+  // hash is not enough to call it published.
+  if (!Array.isArray(Reflect.get(manifest, 'shardBytes'))) return false
   return Reflect.get(manifest, 'sha256') === model.sha256
 }
 

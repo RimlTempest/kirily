@@ -42,12 +42,20 @@ const post = (message: AiResponse, transfer: Transferable[] = []): void => {
   scope.postMessage(message, transfer)
 }
 
+/**
+ * Timed here, not on the main thread. A caller can only see how long the
+ * round trip took, which folds the download, the verify, the compile and the
+ * forward pass into one number — and those call for entirely different work.
+ */
+const watch = createStopwatch(() => performance.now())
+
 const onnx = (spec: ModelSpec, backend: OrtBackend): BackgroundRemovalProvider =>
   createOnnxProvider(
     {
       fetch: (url) => fetch(url),
       weightsBaseUrl: `/models/${spec.id}`,
       createSession: createOrtSessionFactory({ backend }),
+      record: (stage, ms) => watch.record(stage, ms),
     },
     spec,
   )
@@ -85,13 +93,6 @@ const getChain = async (): Promise<BackgroundRemovalProvider> => {
 scope.addEventListener('message', (event: MessageEvent<AiRequest>) => {
   void handle(event.data)
 })
-
-/**
- * Timed here, not on the main thread. A caller can only see how long the
- * round trip took, which folds the download, the compile and the forward pass
- * into one number — and those three call for entirely different work.
- */
-const watch = createStopwatch(() => performance.now())
 
 const handle = async (request: AiRequest): Promise<void> => {
   const chain = await getChain()
