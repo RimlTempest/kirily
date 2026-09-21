@@ -30,6 +30,13 @@ jobs:
         with: { persist-credentials: false }
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with: { cache: true }
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+
+      # mise が固定しているのは rust 本体までで、wasm-pack は入っていない。
+      # ここを忘れると `wasm:build` が exit 127 で落ちる。CI の
+      # typecheck / e2e が同じ行を持っているのは、同じ理由である。
+      - run: cargo install wasm-pack --locked
+
       - run: bun install --frozen-lockfile
 
       # 重みは 198 MiB あって git に入っていない。キーが

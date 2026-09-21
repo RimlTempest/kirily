@@ -191,7 +191,7 @@ Pixel 7 では 1600×600 が 24% にしかならず、髪の隙間を指で塗�
 — 回転はビューポートの性質で、マスクも元画像も見ていません
 （[ADR-0027](docs/adr/0027-view-rotation.md)）。
 
-テスト: TypeScript 421 / Rust 28 / E2E 116（PC + モバイル、+ WebGPU 段）。
+テスト: TypeScript 429 / Rust 28 / E2E 116（PC + モバイル、+ WebGPU 段）。
 
 切り抜き品質は点検査ではなく**数値**で押さえています。正解のアルファが
 算術的に分かる合成画像 5 枚に対し、IoU / Boundary F-score / MAE を測って

@@ -76,6 +76,16 @@ jobs:
           # 固定されていることと、正しいものに固定されていることは別である。
           bun run tools/check-action-pins.ts
 
+      - name: 各 job が、自分が使う道具を自分で入れていること
+        run: |
+          # mise が固定しているのは rust 本体までで、wasm-pack は入らない。
+          # deploy job にこの行が無く、`wasm:build` が exit 127 で落ちた。
+          #
+          # 見つからなかったのは deploy が workflow_dispatch だけだからで、
+          # 「必要になるまで誰も回さない workflow」は「必要になった瞬間に
+          # 壊れている workflow」である。静的に見るしかない。
+          bun run tools/check-workflow-tools.ts
+
       - name: ピクセル処理 crate が wasm-bindgen に依存していないこと
         run: |
           for f in crates/kirily-image/Cargo.toml crates/kirily-mask/Cargo.toml crates/kirily-raster/Cargo.toml; do
