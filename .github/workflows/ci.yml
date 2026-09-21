@@ -23,10 +23,13 @@ jobs:
   guard:
     name: 不変条件の検査
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with: { persist-credentials: false }
+      # ピンの検査だけが bun を要る。依存は無いので `bun install` は要らない。
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+        with: { cache: true }
 
       - name: 画像をサーバーに置くバインディングを足していないこと (ADR-0004)
         run: |
@@ -59,13 +62,19 @@ jobs:
             exit 1
           fi
 
-      - name: GitHub Actions が commit SHA で固定されていること
+      - name: GitHub Actions のピンが実在し、コメントどおりであること
+        env:
+          # レート制限に当たらないためと、当たったときに黙って通さないため。
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           # タグは可動。乗っ取られた action が次の実行から任意コードを走らせる。
-          if grep -nE '^\s*-?\s*uses:\s*[^@]+@(v[0-9.]+|main|master)\s*$' .github/workflows/*.yml; then
-            echo "::error::Pin every action to a full commit SHA (keep the tag in a trailing comment)."
-            exit 1
-          fi
+          #
+          # ただし「SHA が書いてあるか」だけでは足りない。40 桁の 16 進数と
+          # `# v3` が並んでいれば正しい pin に見えるが、その SHA が
+          # そのタグのものだとは限らない。実際に取り違えた（ADR-0024）。
+          #
+          # 固定されていることと、正しいものに固定されていることは別である。
+          bun run tools/check-action-pins.ts
 
       - name: ピクセル処理 crate が wasm-bindgen に依存していないこと
         run: |

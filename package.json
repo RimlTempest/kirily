@@ -11,7 +11,7 @@
     "dev": "bun run --filter '@kirily/web' dev",
     "build": "bun run wasm:build && bun run --filter '@kirily/web' build",
     "typecheck": "bun run --filter '@kirily/web' sync && tsc --build && bun run --filter '@kirily/web' check",
-    "test": "bun test packages/ apps/",
+    "test": "bun test packages/ apps/ tools/",
     "lint": "oxlint --type-aware",
     "lint:fix": "oxlint --type-aware --fix",
     "fmt": "oxfmt . && prettier --write --log-level warn \"**/*.{svelte,md,css,html}\"",
