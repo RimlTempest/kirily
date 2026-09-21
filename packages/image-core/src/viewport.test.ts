@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { estimateBackground } from './decontaminate.ts'
+import { BACKGROUND_FIELD, estimateField } from './field.ts'
 import { renderViewport } from './viewport.ts'
 
 const IMAGE = { width: 4, height: 4 }
@@ -190,14 +190,14 @@ describe('renderViewport with a background field', () => {
   })
 
   test('gives the soft pixel its own colour back when a field is given', () => {
-    const field = estimateBackground(color.rgba, image, mask, 16)
+    const field = estimateField(color.rgba, image, mask, { ...BACKGROUND_FIELD, cell: 16 })
     const out = renderViewport(color, mask, image, viewport, image, undefined, field)
     expect([out[0], out[1], out[2], out[3]]).toEqual([255, 255, 255, 128])
   })
 
   test('does not touch a fully opaque pixel', () => {
     const solid = new Uint8Array([255, 0])
-    const field = estimateBackground(color.rgba, image, solid, 16)
+    const field = estimateField(color.rgba, image, solid, { ...BACKGROUND_FIELD, cell: 16 })
     const out = renderViewport(color, solid, image, viewport, image, undefined, field)
     expect([out[0], out[1], out[2], out[3]]).toEqual([128, 128, 128, 255])
   })

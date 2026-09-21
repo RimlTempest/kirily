@@ -13,8 +13,9 @@
  * of the mask in step with the real one on every brush stroke.
  */
 import type { Viewport } from '@kirily/contract/geometry'
-import type { BackgroundField } from './decontaminate.ts'
-import { sampleBackground, unmix } from './decontaminate.ts'
+import { unmix } from './decontaminate.ts'
+import type { ColourField } from './field.ts'
+import { sampleField } from './field.ts'
 
 export type Size = { readonly width: number; readonly height: number }
 
@@ -47,7 +48,7 @@ export const renderViewport = (
    * invisible here and obvious the moment the file is used somewhere else —
    * which is the worst possible time to find out.
    */
-  background: BackgroundField | null = null,
+  background: ColourField | null = null,
 ): Uint8ClampedArray => {
   if (color.rgba.length !== color.width * color.height * 4) return out
   if (mask.length !== image.width * image.height) return out
@@ -103,13 +104,13 @@ export const renderViewport = (
 const correct = (
   out: Uint8ClampedArray,
   at: number,
-  field: BackgroundField,
+  field: ColourField,
   imageX: number,
   imageY: number,
 ): void => {
   const coverage = out[at + 3] ?? 0
   if (coverage === 0 || coverage === 255) return
-  const sampled = sampleBackground(field, imageX, imageY)
+  const sampled = sampleField(field, imageX, imageY)
   const alpha = coverage / 255
   for (let channel = 0; channel < 3; channel++) {
     out[at + channel] = unmix(out[at + channel] ?? 0, sampled[channel] ?? 0, alpha)

@@ -34,8 +34,7 @@ import type { ImageEngine } from '@kirily/wasm'
 import { loadImageEngine } from '@kirily/wasm'
 import { createWorkerProvider, spawnAiWorker } from './ai-client.ts'
 import type { DecodedImage } from './decode.ts'
-import type { BackgroundField } from '@kirily/image-core/decontaminate'
-import { estimateBackground } from '@kirily/image-core/decontaminate'
+import type { ColourField } from '@kirily/image-core/field'
 import { removeBackground as removeBackgroundFlow } from './remove-background.ts'
 import { decodeFile } from './decode.ts'
 import type { ExportFormat } from './export.ts'
@@ -78,7 +77,7 @@ export const createEditorStore = (
    * the most expensive thing in the editor. Null until the AI has run — a
    * hand-painted mask gives no basis for saying what was behind the subject.
    */
-  let backgroundField = $state.raw<BackgroundField | null>(null)
+  let backgroundField = $state.raw<ColourField | null>(null)
 
   const engineOrLoad = async (): Promise<ImageEngine> => {
     engine ??= await loadImageEngine()
@@ -112,7 +111,7 @@ export const createEditorStore = (
       return maskVersion
     },
     /** The old background, once the AI has measured it. */
-    get background(): BackgroundField | null {
+    get background(): ColourField | null {
       return backgroundField
     },
     get viewport(): Viewport {
@@ -184,7 +183,7 @@ export const createEditorStore = (
 
       editor = withStatus(next.value, { kind: 'idle' })
       recompose()
-      backgroundField = estimateBackground(decoded.rgba, decoded.source, result.value.alpha)
+      backgroundField = result.value.background
     },
 
     paint: (points: readonly ImagePoint[], mode: BrushMode): void => {

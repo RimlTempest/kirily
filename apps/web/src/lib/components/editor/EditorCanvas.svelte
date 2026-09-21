@@ -12,7 +12,7 @@
    */
   import type { ImagePoint, ScreenPoint, Viewport } from '@kirily/contract/geometry'
   import { screenPoint, toImagePoint } from '@kirily/contract/geometry'
-  import type { BackgroundField } from '@kirily/image-core/decontaminate'
+  import type { ColourField } from '@kirily/image-core/field'
   import type { ColorSource } from '@kirily/image-core/viewport'
   import { renderViewport } from '@kirily/image-core/viewport'
 
@@ -26,7 +26,7 @@
     /** Changes whenever the mask changes; used to trigger a redraw. */
     version: number
     /** The old background, once the AI has measured it. Null disables the correction. */
-    background: BackgroundField | null
+    background: ColourField | null
     viewport: Viewport
     painting: boolean
     /** True when a single click fills a region instead of painting a stroke. */

@@ -11,8 +11,8 @@ import { KirilyErrorCode, kirilyError } from '@kirily/contract/error'
 import type { Result } from '@kirily/contract/result'
 import { err, ok } from '@kirily/contract/result'
 import type { Rgb } from '@kirily/image-core/composite'
-import type { BackgroundField } from '@kirily/image-core/decontaminate'
 import { decontaminate } from '@kirily/image-core/decontaminate'
+import type { ColourField } from '@kirily/image-core/field'
 import type { ImageEngine } from '@kirily/wasm'
 
 export const ExportFormat = {
@@ -47,7 +47,7 @@ export type ExportSource = {
    * edge keeps the colour it was mixed with, which is invisible against the
    * editor's checkerboard and obvious on someone else's slide.
    */
-  readonly background: BackgroundField | null
+  readonly background: ColourField | null
 }
 
 /**

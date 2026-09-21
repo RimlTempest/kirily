@@ -13,7 +13,10 @@ import type { BackgroundRemovalProvider } from '@kirily/ai/provider'
 import type { KirilyError } from '@kirily/contract/error'
 import type { Result } from '@kirily/contract/result'
 import { err, ok } from '@kirily/contract/result'
+import type { ColourField } from '@kirily/image-core/field'
+import { BACKGROUND_FIELD, FOREGROUND_FIELD, estimateField } from '@kirily/image-core/field'
 import { DEFAULT_REFINE, refineRadiusFor } from '@kirily/image-core/guided'
+import { colourMatte } from '@kirily/image-core/matte'
 import type { ImageEngine } from '@kirily/wasm'
 import type { DecodedImage } from './decode.ts'
 
@@ -36,6 +39,11 @@ export type RemovedBackground = {
   readonly providerId: string
   /** False when the guided filter could not run. */
   readonly refined: boolean
+  /**
+   * The old background's colour, measured here because the matting pass needs
+   * it anyway. Handing it back saves the store a second full-image scan.
+   */
+  readonly background: ColourField
 }
 
 /**
@@ -72,5 +80,14 @@ export const removeBackground = async (
   })
   if (!refined.ok) deps.onRefineSkipped?.(refined.error)
 
-  return ok({ alpha, providerId: deps.provider.info.id, refined: refined.ok })
+  // Last, and at full resolution: the guided filter pulls the model's outline
+  // towards the image's, and this decides the outline from the image's own
+  // pixels. Running it before refinement would hand the filter an edge it
+  // would then soften again.
+  const background = estimateField(image.rgba, image.source, alpha, BACKGROUND_FIELD)
+  const foreground = estimateField(image.rgba, image.source, alpha, FOREGROUND_FIELD)
+  const matted = colourMatte(image.rgba, alpha, image.source, { background, foreground })
+  if (!matted.ok) deps.onRefineSkipped?.(matted.error)
+
+  return ok({ alpha, providerId: deps.provider.info.id, refined: refined.ok, background })
 }

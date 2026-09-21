@@ -1,22 +1,22 @@
 {
   "desktop": {
     "ring-with-hole": {
-      "iou": 0.805,
-      "boundary": 0.818,
-      "mae": 0.073,
-      "halo": 0.122
+      "iou": 0.808,
+      "boundary": 0.883,
+      "mae": 0.069,
+      "halo": 0.068
     },
     "gradient-backdrop": {
-      "iou": 0.999,
+      "iou": 1,
       "boundary": 1,
-      "mae": 0.002,
-      "halo": 0.085
+      "mae": 0,
+      "halo": 0.009
     },
     "solid-disc": {
-      "iou": 0.999,
+      "iou": 1,
       "boundary": 1,
-      "mae": 0.002,
-      "halo": 0.075
+      "mae": 0,
+      "halo": 0.005
     },
     "low-contrast": {
       "iou": 0.998,
@@ -25,18 +25,18 @@
       "halo": 0.008
     },
     "thin-strands": {
-      "iou": 0.995,
-      "boundary": 0.961,
-      "mae": 0.003,
-      "halo": 0.135
+      "iou": 0.997,
+      "boundary": 0.992,
+      "mae": 0,
+      "halo": 0.044
     }
   },
   "desktop-webgpu": {
     "solid-disc": {
-      "iou": 0.999,
+      "iou": 1,
       "boundary": 1,
-      "mae": 0.001,
-      "halo": 0.06
+      "mae": 0,
+      "halo": 0.004
     },
     "low-contrast": {
       "iou": 0.999,
@@ -45,22 +45,22 @@
       "halo": 0.008
     },
     "thin-strands": {
-      "iou": 0.996,
-      "boundary": 0.993,
-      "mae": 0.003,
-      "halo": 0.149
+      "iou": 0.997,
+      "boundary": 0.99,
+      "mae": 0.001,
+      "halo": 0.096
     },
     "ring-with-hole": {
-      "iou": 0.805,
+      "iou": 0.804,
       "boundary": 0.818,
-      "mae": 0.072,
-      "halo": 0.111
+      "mae": 0.071,
+      "halo": 0.075
     },
     "gradient-backdrop": {
-      "iou": 0.999,
+      "iou": 1,
       "boundary": 1,
-      "mae": 0.001,
-      "halo": 0.06
+      "mae": 0,
+      "halo": 0.009
     }
   }
 }
