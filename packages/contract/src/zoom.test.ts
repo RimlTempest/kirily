@@ -1,3 +1,4 @@
+import type { Viewport } from './geometry.ts'
 import { describe, expect, test } from 'bun:test'
 import {
   clampZoom,
@@ -11,7 +12,7 @@ import {
   zoomAt,
 } from './geometry.ts'
 
-const viewport = { scale: 1, offsetX: 0, offsetY: 0 }
+const viewport: Viewport = { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 }
 
 describe('clampZoom', () => {
   test('keeps the scale inside a usable range', () => {
@@ -41,7 +42,7 @@ describe('zoomAt', () => {
   })
 
   test('holds the anchor when zooming out too', () => {
-    const start = { scale: 3, offsetX: -120, offsetY: 40 }
+    const start: Viewport = { scale: 3, offsetX: -120, offsetY: 40, rotation: 0 }
     const anchor = screenPoint(17, 233)
     const before = toImagePoint(anchor, start)
 

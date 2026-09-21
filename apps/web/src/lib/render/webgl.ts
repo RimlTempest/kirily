@@ -75,6 +75,10 @@ uniform vec2 uFieldSize;
 uniform float uCell;
 uniform float uScale;
 uniform vec2 uOffset;
+// Clockwise quarter turns, as a rotation matrix. Undone before anything is
+// sampled, so everything below stays in the image's own coordinates — the
+// same order the CPU path takes, because the two have to draw one picture.
+uniform mat2 uUnturn;
 uniform bool uCorrect;
 // The cut-out's own placement: offset in image pixels, then zoom about the
 // image's centre. Undone before anything is read, exactly as the CPU path
@@ -88,7 +92,7 @@ void main() {
   // gl_FragCoord is centred and origin bottom-left; the rest of Kirily counts
   // rows from the top, so flip here and nowhere else.
   vec2 screen = vec2(gl_FragCoord.x, uTarget.y - gl_FragCoord.y);
-  vec2 view = (screen - uOffset) / uScale;
+  vec2 view = uUnturn * ((screen - uOffset) / uScale);
 
   // Named middle, not half: half is a reserved word in GLSL ES and a shader
   // using it does not compile. (No backticks in here either — this source is
@@ -222,6 +226,7 @@ export const createWebglRenderer = (canvas: HTMLCanvasElement): Renderer | null 
     cell: at('uCell'),
     scale: at('uScale'),
     offset: at('uOffset'),
+    unturn: at('uUnturn'),
     correct: at('uCorrect'),
     place: at('uPlace'),
     placeScale: at('uPlaceScale'),
@@ -340,6 +345,19 @@ export const createWebglRenderer = (canvas: HTMLCanvasElement): Renderer | null 
       gl.uniform1f(uniforms.cell, field?.cell ?? 1)
       gl.uniform1f(uniforms.scale, scene.viewport.scale === 0 ? 1 : scene.viewport.scale)
       gl.uniform2f(uniforms.offset, scene.viewport.offsetX, scene.viewport.offsetY)
+      // Column major, and the inverse of the view's turn: 90° clockwise on
+      // screen is 90° anticlockwise on the way back.
+      const quarters: Record<number, readonly number[]> = {
+        0: [1, 0, 0, 1],
+        90: [0, -1, 1, 0],
+        180: [-1, 0, 0, -1],
+        270: [0, 1, -1, 0],
+      }
+      gl.uniformMatrix2fv(
+        uniforms.unturn,
+        false,
+        new Float32Array(quarters[scene.viewport.rotation] ?? [1, 0, 0, 1]),
+      )
       gl.uniform1i(uniforms.correct, field === null ? 0 : 1)
       const placement = scene.placement
       gl.uniform2f(uniforms.place, placement.offsetX, placement.offsetY)

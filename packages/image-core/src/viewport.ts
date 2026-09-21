@@ -13,6 +13,7 @@
  * of the mask in step with the real one on every brush stroke.
  */
 import type { Viewport } from '@kirily/contract/geometry'
+import { toImagePoint, screenPoint } from '@kirily/contract/geometry'
 import { unmix } from './decontaminate.ts'
 import type { ColourField } from './field.ts'
 import { sampleField } from './field.ts'
@@ -66,12 +67,18 @@ export const renderViewport = (
   const scale = viewport.scale === 0 ? 1 : viewport.scale
   const placed = isPlaced(placement)
 
+  const turned = viewport.rotation !== 0
+
   for (let y = 0; y < target.height; y++) {
-    const imageY = (y + 0.5 - viewport.offsetY) / scale
     const rowOut = y * target.width * 4
 
     for (let x = 0; x < target.width; x++) {
-      const viewX = (x + 0.5 - viewport.offsetX) / scale
+      // A turned view is undone here, before anything is sampled, so the
+      // colour, the mask and the fields below all stay in the image's own
+      // coordinates and know nothing about it.
+      const viewed = turned ? toImagePoint(screenPoint(x + 0.5, y + 0.5), viewport) : null
+      const imageY = viewed === null ? (y + 0.5 - viewport.offsetY) / scale : viewed.y
+      const viewX = viewed === null ? (x + 0.5 - viewport.offsetX) / scale : viewed.x
       const at = rowOut + x * 4
 
       // The placement is undone before anything is read, so everything below

@@ -38,27 +38,88 @@ export type Rect = {
   readonly height: number
 }
 
+/** Clockwise quarter turns. Anything else would resample and lose detail. */
+export const QUARTERS = [0, 90, 180, 270] as const
+
+export type Quarter = (typeof QUARTERS)[number]
+
+export const nextQuarter = (rotation: Quarter): Quarter =>
+  QUARTERS[(QUARTERS.indexOf(rotation) + 1) % QUARTERS.length] ?? 0
+
 export type Viewport = {
   /** Screen pixels per image pixel. 1 means 100%. */
   readonly scale: number
   /** Where the image origin sits, in screen pixels. */
   readonly offsetX: number
   readonly offsetY: number
+  /**
+   * How far the image is turned on screen, clockwise.
+   *
+   * A property of the *view*, like the zoom. The mask, the crop and the export
+   * never see it: a landscape photograph held in a portrait hand is hard to
+   * paint on, and that is a problem with the hand rather than with the file
+   * (ADR-0027).
+   */
+  readonly rotation: Quarter
 }
 
-export const IDENTITY_VIEWPORT: Viewport = { scale: 1, offsetX: 0, offsetY: 0 }
+export const IDENTITY_VIEWPORT: Viewport = { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 }
 
-export const toImagePoint = (point: ScreenPoint, viewport: Viewport): ImagePoint =>
-  imagePoint(
+/**
+ * Turns a vector about the origin, not about the image's centre.
+ *
+ * Keeping the rotation free of the image's size is what lets the conversions
+ * stay two-argument functions: whatever translation a turn needs to bring the
+ * picture back into view is folded into the offsets, which is where every
+ * other translation already lives.
+ */
+const turn = (x: number, y: number, rotation: Quarter): { x: number; y: number } => {
+  if (rotation === 90) return { x: -y, y: x }
+  if (rotation === 180) return { x: -x, y: -y }
+  if (rotation === 270) return { x: y, y: -x }
+  return { x, y }
+}
+
+/** Total over the four, so undoing a turn needs no arithmetic and no cast. */
+const OPPOSITE: Record<Quarter, Quarter> = { 0: 0, 90: 270, 180: 180, 270: 90 }
+
+const unturn = (x: number, y: number, rotation: Quarter): { x: number; y: number } =>
+  turn(x, y, OPPOSITE[rotation])
+
+export const toImagePoint = (point: ScreenPoint, viewport: Viewport): ImagePoint => {
+  const turned = unturn(
     (point.x - viewport.offsetX) / viewport.scale,
     (point.y - viewport.offsetY) / viewport.scale,
+    viewport.rotation,
   )
+  return imagePoint(turned.x, turned.y)
+}
 
-export const toScreenPoint = (point: ImagePoint, viewport: Viewport): ScreenPoint =>
-  screenPoint(
-    point.x * viewport.scale + viewport.offsetX,
-    point.y * viewport.scale + viewport.offsetY,
+export const toScreenPoint = (point: ImagePoint, viewport: Viewport): ScreenPoint => {
+  const turned = turn(point.x, point.y, viewport.rotation)
+  return screenPoint(
+    turned.x * viewport.scale + viewport.offsetX,
+    turned.y * viewport.scale + viewport.offsetY,
   )
+}
+
+/** What the image occupies on screen once it is turned, before scaling. */
+export const turnedBounds = (
+  image: { readonly width: number; readonly height: number },
+  rotation: Quarter,
+): { readonly x: number; readonly y: number; readonly width: number; readonly height: number } => {
+  const corners = [
+    turn(0, 0, rotation),
+    turn(image.width, 0, rotation),
+    turn(0, image.height, rotation),
+    turn(image.width, image.height, rotation),
+  ]
+  const xs = corners.map((corner) => corner.x)
+  const ys = corners.map((corner) => corner.y)
+  const x = Math.min(...xs)
+  const y = Math.min(...ys)
+  return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y }
+}
 
 /** The zoom presets the toolbar offers (kirily-design.md §14). */
 export const ZOOM_STEPS: readonly number[] = [0.25, 0.5, 1, 2, 4]
@@ -84,10 +145,12 @@ export const clampZoom = (scale: number): number => {
 export const zoomAt = (viewport: Viewport, anchor: ScreenPoint, scale: number): Viewport => {
   const next = clampZoom(scale)
   const image = toImagePoint(anchor, viewport)
+  const turned = turn(image.x, image.y, viewport.rotation)
   return {
+    ...viewport,
     scale: next,
-    offsetX: anchor.x - image.x * next,
-    offsetY: anchor.y - image.y * next,
+    offsetX: anchor.x - turned.x * next,
+    offsetY: anchor.y - turned.y * next,
   }
 }
 
@@ -105,10 +168,14 @@ export const panBy = (viewport: Viewport, dx: number, dy: number): Viewport => (
 export const fitViewport = (
   image: { readonly width: number; readonly height: number },
   container: { readonly width: number; readonly height: number },
+  rotation: Quarter = 0,
 ): Viewport => {
   const usable = container.width > 0 && container.height > 0
-  const scale = usable ? clampZoom(Math.min(1, fitScale(image, container))) : 1
-  return centred(image, container, scale)
+  // Fit what the screen will show, which is the turned shape: a landscape
+  // image turned a quarter has to be fitted as a portrait one.
+  const bounds = turnedBounds(image, rotation)
+  const scale = usable ? clampZoom(Math.min(1, fitScale(bounds, container))) : 1
+  return centred(image, container, scale, rotation)
 }
 
 /** Scale that fits `image` inside `container` without cropping it. */
@@ -125,8 +192,15 @@ export const centred = (
   image: { readonly width: number; readonly height: number },
   container: { readonly width: number; readonly height: number },
   scale: number,
-): Viewport => ({
-  scale,
-  offsetX: (container.width - image.width * scale) / 2,
-  offsetY: (container.height - image.height * scale) / 2,
-})
+  rotation: Quarter = 0,
+): Viewport => {
+  const bounds = turnedBounds(image, rotation)
+  return {
+    scale,
+    rotation,
+    // The turned box does not start at the origin — a quarter turn puts it at
+    // negative x — so the offset has to undo that before centring.
+    offsetX: (container.width - bounds.width * scale) / 2 - bounds.x * scale,
+    offsetY: (container.height - bounds.height * scale) / 2 - bounds.y * scale,
+  }
+}

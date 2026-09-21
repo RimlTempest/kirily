@@ -10,7 +10,13 @@ import type { BackgroundRemovalProvider } from '@kirily/ai/provider'
 import type { KirilyError } from '@kirily/contract/error'
 import { exportFileName } from '@kirily/contract/image'
 import type { ImagePoint, Rect, ScreenPoint, Viewport } from '@kirily/contract/geometry'
-import { fitViewport, panBy, zoomAt } from '@kirily/contract/geometry'
+import {
+  IDENTITY_VIEWPORT,
+  fitViewport,
+  nextQuarter,
+  panBy,
+  zoomAt,
+} from '@kirily/contract/geometry'
 import type { BrushMode, BucketSettings } from '@kirily/contract/mask'
 import type { EditorState, EditorStatus } from '@kirily/editor-core/state'
 import {
@@ -243,6 +249,21 @@ export const createEditorStore = (
       if (!next.ok) return fail(next.error)
       editor = next.value
     },
+    /**
+     * Turns the view a quarter, and refits so the whole picture is on screen
+     * in its new shape.
+     *
+     * Refitting rather than keeping the zoom: the point of turning is that a
+     * wide photograph fills a tall screen, and holding the old zoom throws
+     * that away. Someone who had zoomed in was looking at a detail, and after
+     * a turn they have to find it again anyway.
+     */
+    rotateView(container: { readonly width: number; readonly height: number }): void {
+      if (editor === null) return
+      const rotation = nextQuarter(editor.viewport.rotation)
+      editor = withViewport(editor, fitViewport(editor.source, container, rotation))
+    },
+
     /** True once the AI has produced a mask, so the bucket has something to follow. */
     get hasMask(): boolean {
       return backgroundField !== null
@@ -311,7 +332,7 @@ export const createEditorStore = (
       exportSettings = withBackdrop(exportSettings, Backdrops.Image)
     },
     get viewport(): Viewport {
-      return editor?.viewport ?? { scale: 1, offsetX: 0, offsetY: 0 }
+      return editor?.viewport ?? IDENTITY_VIEWPORT
     },
     get status(): EditorStatus {
       return editor?.status ?? { kind: 'idle' }
@@ -458,7 +479,9 @@ export const createEditorStore = (
     /** Shows the whole image, centred. Also the starting view. */
     fit: (container: { readonly width: number; readonly height: number }): void => {
       if (editor === null) return
-      editor = withViewport(editor, fitViewport(editor.source, container))
+      // Keeps the turn. Fitting is about the frame, not about which way up the
+      // picture is being looked at.
+      editor = withViewport(editor, fitViewport(editor.source, container, editor.viewport.rotation))
     },
 
     /** Jumps to a preset zoom, keeping the centre of the view still. */

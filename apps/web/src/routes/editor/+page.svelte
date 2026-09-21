@@ -302,8 +302,10 @@
           <div class="pointer-events-auto">
             <ZoomControls
               scale={store.viewport.scale}
+              rotation={store.viewport.rotation}
               onzoom={(scale) => store.setZoom(scale, centre())}
               onfit={() => store.fit(canvasSize)}
+              onrotate={() => store.rotateView(canvasSize)}
             />
           </div>
         </div>

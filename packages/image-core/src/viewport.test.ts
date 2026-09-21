@@ -1,3 +1,4 @@
+import type { Viewport } from '@kirily/contract/geometry'
 import { describe, expect, test } from 'bun:test'
 import { BACKGROUND_FIELD, estimateField } from './field.ts'
 import { renderViewport } from './viewport.ts'
@@ -30,7 +31,7 @@ describe('renderViewport', () => {
       source(),
       opaque(),
       IMAGE,
-      { scale: 1, offsetX: 0, offsetY: 0 },
+      { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 },
       { width: 4, height: 4 },
     )
 
@@ -46,7 +47,7 @@ describe('renderViewport', () => {
       source(),
       mask,
       IMAGE,
-      { scale: 1, offsetX: 0, offsetY: 0 },
+      { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 },
       { width: 4, height: 4 },
     )
 
@@ -60,7 +61,7 @@ describe('renderViewport', () => {
       source(),
       opaque(),
       IMAGE,
-      { scale: 1, offsetX: 2, offsetY: 2 },
+      { scale: 1, offsetX: 2, offsetY: 2, rotation: 0 },
       { width: 8, height: 8 },
     )
 
@@ -74,14 +75,14 @@ describe('renderViewport', () => {
       source(),
       opaque(),
       IMAGE,
-      { scale: 1, offsetX: 0, offsetY: 0 },
+      { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 },
       { width: 4, height: 4 },
     )
     const panned = renderViewport(
       source(),
       opaque(),
       IMAGE,
-      { scale: 1, offsetX: -1, offsetY: 0 },
+      { scale: 1, offsetX: -1, offsetY: 0, rotation: 0 },
       { width: 4, height: 4 },
     )
 
@@ -96,7 +97,7 @@ describe('renderViewport', () => {
       source(),
       opaque(),
       IMAGE,
-      { scale: 4, offsetX: 0, offsetY: 0 },
+      { scale: 4, offsetX: 0, offsetY: 0, rotation: 0 },
       { width: 8, height: 8 },
     )
 
@@ -112,7 +113,7 @@ describe('renderViewport', () => {
       source(),
       opaque(),
       IMAGE,
-      { scale: 0.5, offsetX: 0, offsetY: 0 },
+      { scale: 0.5, offsetX: 0, offsetY: 0, rotation: 0 },
       { width: 2, height: 2 },
     )
 
@@ -137,7 +138,7 @@ describe('renderViewport', () => {
       half,
       mask,
       IMAGE,
-      { scale: 1, offsetX: 0, offsetY: 0 },
+      { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 },
       { width: 4, height: 4 },
     )
 
@@ -152,7 +153,7 @@ describe('renderViewport', () => {
       source(),
       opaque(),
       IMAGE,
-      { scale: 1, offsetX: 0, offsetY: 0 },
+      { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 },
       { width: 4, height: 4 },
       out,
     )
@@ -165,7 +166,7 @@ describe('renderViewport', () => {
       { rgba: new Uint8ClampedArray(4), width: 4, height: 4 },
       opaque(),
       IMAGE,
-      { scale: 1, offsetX: 0, offsetY: 0 },
+      { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 },
       { width: 4, height: 4 },
       out,
     )
@@ -175,7 +176,7 @@ describe('renderViewport', () => {
 
 describe('renderViewport with a background field', () => {
   const image = { width: 2, height: 1 }
-  const viewport = { scale: 1, offsetX: 0, offsetY: 0 }
+  const viewport: Viewport = { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 }
   /** Left pixel half covered by white over black; right pixel is that black. */
   const color = {
     width: 2,
@@ -205,7 +206,7 @@ describe('renderViewport with a background field', () => {
 
 describe('renderViewport with the cut-out moved', () => {
   const image = { width: 4, height: 1 }
-  const viewport = { scale: 1, offsetX: 0, offsetY: 0 }
+  const viewport: Viewport = { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 }
   /** One opaque pixel at x = 1, nothing anywhere else. */
   const colour = {
     width: 4,

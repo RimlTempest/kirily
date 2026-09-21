@@ -22,6 +22,7 @@ const canvasPixels = async (
   page: Page,
   renderer: 'webgl' | 'canvas',
   zoom: boolean,
+  quarters = 0,
 ): Promise<Buffer> => {
   await page.goto(`/editor?renderer=${renderer}`)
   await page.getByLabel('編集する画像を選ぶ').setInputFiles(fixture)
@@ -46,6 +47,10 @@ const canvasPixels = async (
     expect(await percent()).toBeGreaterThanOrEqual(150)
   }
 
+  for (let i = 0; i < quarters; i += 1) {
+    await page.getByRole('button', { name: '表示を回す' }).click()
+  }
+
   const encoded = await page.evaluate(async () => {
     const canvas = document.querySelector('canvas')
     if (!(canvas instanceof HTMLCanvasElement)) return ''
@@ -66,15 +71,19 @@ const canvasPixels = async (
 }
 
 test.describe('renderer', () => {
-  for (const [name, zoom] of [
-    ['fitted, so both sample bilinearly', false],
-    ['zoomed past 150%, where both switch to nearest', true],
+  for (const [name, zoom, quarters] of [
+    ['fitted, so both sample bilinearly', false, 0],
+    ['zoomed past 150%, where both switch to nearest', true, 0],
+    // The turn is undone in two places written in two languages. If they
+    // disagree by a quarter nobody would notice from one of them alone.
+    ['turned a quarter', false, 1],
+    ['turned three quarters', false, 3],
   ] as const) {
     test(`the GPU draws what the CPU draws — ${name}`, async ({ page }) => {
       test.slow()
 
-      const gpu = await canvasPixels(page, 'webgl', zoom)
-      const cpu = await canvasPixels(page, 'canvas', zoom)
+      const gpu = await canvasPixels(page, 'webgl', zoom, quarters)
+      const cpu = await canvasPixels(page, 'canvas', zoom, quarters)
       expect(gpu.length).toBeGreaterThan(0)
       expect(gpu.length).toBe(cpu.length)
 
