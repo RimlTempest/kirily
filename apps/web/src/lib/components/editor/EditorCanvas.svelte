@@ -102,6 +102,15 @@
   let frame: HTMLDivElement | null = $state(null)
   let size = $state({ width: 0, height: 0 })
 
+  /**
+   * Where the pointer is, in the frame's pixels, for the brush ring.
+   *
+   * Null when it is outside, or when it is a finger: a touch is already
+   * covered by the hand making it, and a ring that trails behind it is worse
+   * than none.
+   */
+  let hover: { x: number; y: number } | null = $state(null)
+
   let stroke: ImagePoint[] = []
   let strokePointer: number | null = null
   let panPointer: number | null = null
@@ -266,6 +275,7 @@
   }
 
   const onPointerMove = (event: PointerEvent): void => {
+    trackHover(event)
     if (touches.has(event.pointerId)) {
       touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
     }
@@ -305,6 +315,15 @@
     if (strokePointer !== event.pointerId) return
     const point = pointAt(event)
     if (point !== null) stroke.push(point)
+  }
+
+  const trackHover = (event: PointerEvent): void => {
+    if (event.pointerType === 'touch' || frame === null) {
+      hover = null
+      return
+    }
+    const box = frame.getBoundingClientRect()
+    hover = { x: event.clientX - box.left, y: event.clientY - box.top }
   }
 
   const endGesture = (event: PointerEvent): void => {
@@ -374,14 +393,41 @@
     onpointermove={onPointerMove}
     onpointerup={endGesture}
     onpointercancel={endGesture}
-    onpointerleave={endGesture}
+    onpointerenter={trackHover}
+    onpointerleave={(event) => {
+      hover = null
+      endGesture(event)
+    }}
   ></canvas>
+
+  {#if painting && hover !== null}
+    <!--
+      The brush is a radius in the image's pixels, so what it covers on screen
+      depends on the zoom. Showing it as a ring is the only way to know how
+      much a stroke will take before taking it.
+
+      Black-white-black rather than `mix-blend-mode: difference`, which is the
+      usual trick: difference against mid grey is mid grey, and a canvas whose
+      backdrop can be a photograph has plenty of that. Three rings have nothing
+      they disappear against.
+    -->
+    <div
+      class="pointer-events-none absolute rounded-full border border-white"
+      style:left={`${hover.x}px`}
+      style:top={`${hover.y}px`}
+      style:width={`${brushSize * 2 * viewport.scale}px`}
+      style:height={`${brushSize * 2 * viewport.scale}px`}
+      style:transform="translate(-50%, -50%)"
+      style:box-shadow="0 0 0 1px rgb(0 0 0 / 0.7), inset 0 0 0 1px rgb(0 0 0 / 0.7)"
+      data-testid="brush-ring"
+    ></div>
+  {/if}
 
   {#if painting}
     <p
       class="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-surface-raised/90 px-3 py-1 text-xs text-ink-muted"
     >
-      ブラシ {Math.round(brushSize)}px
+      ブラシ 直径 {Math.round(brushSize * 2)}px
     </p>
   {:else if filling}
     <p
