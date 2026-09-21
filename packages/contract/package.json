@@ -8,6 +8,7 @@
     "./error": "./src/error.ts",
     "./image": "./src/image.ts",
     "./mask": "./src/mask.ts",
+    "./timing": "./src/timing.ts",
     "./geometry": "./src/geometry.ts"
   },
   "scripts": {

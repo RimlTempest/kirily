@@ -35,6 +35,8 @@ import { loadImageEngine } from '@kirily/wasm'
 import { createWorkerProvider, spawnAiWorker } from './ai-client.ts'
 import type { DecodedImage } from './decode.ts'
 import type { ColourField } from '@kirily/image-core/field'
+import type { Stage, Timings } from '@kirily/contract/timing'
+import { Stage as Stages, createStopwatch, replayTimings } from '@kirily/contract/timing'
 import { removeBackground as removeBackgroundFlow } from './remove-background.ts'
 import { decodeFile } from './decode.ts'
 import type { ExportFormat } from './export.ts'
@@ -43,7 +45,12 @@ import { downloadBlob, exportImage, extensionFor } from './export.ts'
 export type EditorStore = ReturnType<typeof createEditorStore>
 
 export const createEditorStore = (
-  provider: BackgroundRemovalProvider = createWorkerProvider({ createWorker: spawnAiWorker }),
+  /**
+   * Built inside rather than defaulted in the parameter list: the default one
+   * reports its timings to this store's own clock, which does not exist yet
+   * when the parameters are evaluated.
+   */
+  injected: BackgroundRemovalProvider | null = null,
 ) => {
   // `$state.raw`, not `$state`: both hold multi-megabyte pixel and mask
   // buffers and are always replaced wholesale, never mutated field by field.
@@ -78,6 +85,27 @@ export const createEditorStore = (
    * hand-painted mask gives no basis for saying what was behind the subject.
    */
   let backgroundField = $state.raw<ColourField | null>(null)
+
+  /**
+   * Where the time went, for the run the user is looking at.
+   *
+   * "The AI is slow" and "the encoder is slow" need opposite work and look
+   * identical from outside (IMPLEMENTATION.md §59). Cleared when a new file is
+   * opened, so the numbers always describe one image.
+   */
+  const clock = createStopwatch(() => performance.now())
+  let timings = $state.raw<Timings>({})
+  const record = (stage: Stage, ms: number): void => {
+    clock.record(stage, ms)
+    timings = clock.timings()
+  }
+
+  const provider: BackgroundRemovalProvider =
+    injected
+    ?? createWorkerProvider({
+      createWorker: spawnAiWorker,
+      onTimings: (taken) => replayTimings(taken, record),
+    })
 
   const engineOrLoad = async (): Promise<ImageEngine> => {
     engine ??= await loadImageEngine()
@@ -114,6 +142,14 @@ export const createEditorStore = (
     get background(): ColourField | null {
       return backgroundField
     },
+    /** Where the time went. Empty until something has been measured. */
+    get timings(): Timings {
+      return timings
+    },
+    /** Called by the canvas after each composite. */
+    recordRender(ms: number): void {
+      record(Stages.PreviewRender, ms)
+    },
     get viewport(): Viewport {
       return editor?.viewport ?? { scale: 1, offsetX: 0, offsetY: 0 }
     },
@@ -141,7 +177,9 @@ export const createEditorStore = (
         deviceMemoryGb: readDeviceMemory(),
       })
 
-      const result = await decodeFile(file, budget)
+      clock.clear()
+      timings = {}
+      const result = await decodeFile(file, budget, record)
       if (!result.ok) {
         decoded = null
         editor = null
@@ -172,6 +210,7 @@ export const createEditorStore = (
             if (editor !== null) editor = withStatus(editor, { kind: 'ai-processing' })
           },
           onRefineSkipped: (error) => console.warn('[kirily] mask refinement skipped:', error.code),
+          record,
         },
         decoded,
       )
@@ -285,22 +324,26 @@ export const createEditorStore = (
       if (editor === null || decoded === null) return
       editor = withStatus(editor, { kind: 'exporting' })
 
-      const result = await exportImage(
-        await engineOrLoad(),
-        {
-          width: decoded.source.width,
-          height: decoded.source.height,
-          rgba: decoded.rgba,
-          mask: fullMask,
-          background: backgroundField,
-        },
-        {
-          format,
-          quality: 0.92,
-          background: WHITE,
-          rect: exportRect(editor),
-        },
+      // The engine is loaded outside the measurement: on a first export that
+      // is a WASM compile, and folding it in would make encoding look slow.
+      const ready = await engineOrLoad()
+      const source = {
+        width: decoded.source.width,
+        height: decoded.source.height,
+        rgba: decoded.rgba,
+        mask: fullMask,
+        background: backgroundField,
+      }
+      const request = {
+        format,
+        quality: 0.92,
+        background: WHITE,
+        rect: exportRect(editor),
+      }
+      const result = await clock.measureAsync(Stages.Export, () =>
+        exportImage(ready, source, request),
       )
+      timings = clock.timings()
       if (!result.ok) return fail(result.error)
 
       downloadBlob(result.value, exportFileName(decoded.source.fileName, extensionFor(format)))

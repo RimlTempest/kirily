@@ -7,6 +7,7 @@
   import { DEFAULT_BUCKET } from '@kirily/contract/mask'
   import Dropzone from '$lib/components/upload/Dropzone.svelte'
   import EditorCanvas from '$lib/components/editor/EditorCanvas.svelte'
+  import TimingReadout from '$lib/components/editor/TimingReadout.svelte'
   import CropOverlay from '$lib/components/editor/CropOverlay.svelte'
   import ZoomControls from '$lib/components/editor/ZoomControls.svelte'
   import Toolbar from '$lib/components/editor/Toolbar.svelte'
@@ -15,6 +16,15 @@
   import { pendingFile } from '$lib/editor/pending-file.svelte.ts'
 
   const store = createEditorStore()
+
+  /**
+   * Read once, on mount. A developer's instrument: it stays off unless asked
+   * for, so it never covers a user's image (`?timings=1`).
+   */
+  let showTimings = $state(false)
+  onMount(() => {
+    showTimings = new URLSearchParams(globalThis.location.search).get('timings') === '1'
+  })
 
   let tool = $state<EditorTool>(EditorTool.BrushRemove)
 
@@ -139,12 +149,16 @@
   {:else}
     <div class="flex flex-1 flex-col gap-3 md:flex-row-reverse">
       <section class="relative min-h-[50vh] flex-1">
+        {#if showTimings}
+          <TimingReadout timings={store.timings} />
+        {/if}
         <EditorCanvas
           image={{ ...store.image.source, rgba: store.image.rgba }}
           preview={store.image.preview}
           mask={store.mask}
           version={store.maskVersion}
           background={store.background}
+          onrendered={(ms) => store.recordRender(ms)}
           viewport={store.viewport}
           {painting}
           {filling}

@@ -11,6 +11,8 @@ import type { KirilyError } from '@kirily/contract/error'
 import { KirilyErrorCode, kirilyError } from '@kirily/contract/error'
 import type { Result } from '@kirily/contract/result'
 import { err, ok } from '@kirily/contract/result'
+import type { Recorder } from '@kirily/contract/timing'
+import { Stage, createStopwatch, replayTimings } from '@kirily/contract/timing'
 import type { PreviewBudget } from '@kirily/image-core/preview'
 import { previewSizeFor } from '@kirily/image-core/preview'
 
@@ -43,7 +45,11 @@ const readPixels = (
 export const decodeFile = async (
   file: File,
   budget: PreviewBudget,
+  /** Split in two because they scale differently: one with the file, one with the screen. */
+  record: Recorder = () => undefined,
 ): Promise<Result<DecodedImage, KirilyError>> => {
+  const clock = createStopwatch(() => performance.now())
+  const report = (): void => replayTimings(clock.timings(), record)
   // The extension is not trusted: only what the browser managed to decode is
   // (IMPLEMENTATION.md §7).
   let bitmap: ImageBitmap
@@ -66,14 +72,17 @@ export const decodeFile = async (
     return described
   }
 
-  const full = readPixels(bitmap, bitmap.width, bitmap.height)
+  const full = clock.measure(Stage.Decode, () => readPixels(bitmap, bitmap.width, bitmap.height))
   if (!full.ok) {
     bitmap.close()
     return full
   }
 
   const previewSize = previewSizeFor(described.value, budget)
-  const preview = readPixels(bitmap, previewSize.width, previewSize.height)
+  const preview = clock.measure(Stage.Preview, () =>
+    readPixels(bitmap, previewSize.width, previewSize.height),
+  )
+  report()
   // The bitmap has done its job; holding it would keep a third full-resolution
   // copy of the image alive.
   bitmap.close()

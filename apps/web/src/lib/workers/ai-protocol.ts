@@ -7,6 +7,7 @@
  * 7 MB preview on every run would show up as a stutter.
  */
 import type { KirilyErrorCode } from '@kirily/contract/error'
+import type { Timings } from '@kirily/contract/timing'
 
 export type AiRequest =
   | { readonly type: 'initialize' }
@@ -19,13 +20,20 @@ export type AiRequest =
 
 export type AiResponse =
   | { readonly type: 'progress'; readonly value: number }
-  | { readonly type: 'ready'; readonly providerId: string; readonly label: string }
+  | {
+      readonly type: 'ready'
+      readonly providerId: string
+      readonly label: string
+      /** Measured on the worker's clock: the two are not comparable. */
+      readonly timings: Timings
+    }
   | {
       readonly type: 'result'
       readonly width: number
       readonly height: number
       readonly alpha: ArrayBuffer
       readonly providerId: string
+      readonly timings: Timings
     }
   | {
       readonly type: 'error'

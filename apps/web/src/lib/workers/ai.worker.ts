@@ -18,6 +18,7 @@ import type { GpuCapabilities, OrtBackend } from '@kirily/ai/onnx/ort'
 import { createOrtSessionFactory, detectGpu } from '@kirily/ai/onnx/ort'
 import { planModels } from '@kirily/ai/onnx/plan'
 import type { ModelSpec } from '@kirily/ai/onnx/spec'
+import { Stage, createStopwatch } from '@kirily/contract/timing'
 import type { AiRequest, AiResponse } from './ai-protocol.ts'
 
 /**
@@ -85,26 +86,44 @@ scope.addEventListener('message', (event: MessageEvent<AiRequest>) => {
   void handle(event.data)
 })
 
+/**
+ * Timed here, not on the main thread. A caller can only see how long the
+ * round trip took, which folds the download, the compile and the forward pass
+ * into one number — and those three call for entirely different work.
+ */
+const watch = createStopwatch(() => performance.now())
+
 const handle = async (request: AiRequest): Promise<void> => {
   const chain = await getChain()
 
   switch (request.type) {
     case 'initialize': {
-      const ready = await chain.initialize((value) => post({ type: 'progress', value }))
+      watch.clear()
+      const ready = await watch.measureAsync(Stage.AiLoad, () =>
+        chain.initialize((value) => post({ type: 'progress', value })),
+      )
       if (!ready.ok) {
         post({ type: 'error', code: ready.error.code, detail: ready.error.detail })
         return
       }
-      post({ type: 'ready', providerId: chain.info.id, label: chain.info.label })
+      post({
+        type: 'ready',
+        providerId: chain.info.id,
+        label: chain.info.label,
+        timings: watch.timings(),
+      })
       return
     }
 
     case 'remove-background': {
-      const result = await chain.removeBackground({
-        width: request.width,
-        height: request.height,
-        rgba: new Uint8ClampedArray(request.rgba),
-      })
+      watch.clear()
+      const result = await watch.measureAsync(Stage.AiInference, () =>
+        chain.removeBackground({
+          width: request.width,
+          height: request.height,
+          rgba: new Uint8ClampedArray(request.rgba),
+        }),
+      )
       if (!result.ok) {
         post({ type: 'error', code: result.error.code, detail: result.error.detail })
         return
@@ -118,6 +137,7 @@ const handle = async (request: AiRequest): Promise<void> => {
           height: result.value.height,
           alpha: alpha.buffer,
           providerId: chain.info.id,
+          timings: watch.timings(),
         },
         [alpha.buffer],
       )

@@ -148,7 +148,12 @@ PC とモバイルの両方で通ります。
 [ADR-0013](docs/adr/0013-colour-matting.md)）。F と B が同じ色のとき —
 白いシャツと白い背景 — は式に割るものが無いので、そこだけモデルに任せます。
 
-テスト: TypeScript 285 / Rust 27 / E2E 48（PC + モバイル、+ WebGPU 段）。
+速度は段ごとに測っています（`?timings=1`、[ADR-0015](docs/adr/0015-performance-instrumentation.md)）。
+最初の測定で、ロードマップが挙げていたタイル処理と SIMD には効く先が無く
+（decode 3〜8ms、export 43ms）、本当のボトルネックは**レンダラ**だと分かりました
+— Retina 全画面で 84.6ms/フレーム、12fps です。
+
+テスト: TypeScript 296 / Rust 27 / E2E 48（PC + モバイル、+ WebGPU 段）。
 
 切り抜き品質は点検査ではなく**数値**で押さえています。正解のアルファが
 算術的に分かる合成画像 5 枚に対し、IoU / Boundary F-score / MAE を測って

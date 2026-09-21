@@ -37,6 +37,8 @@
     onzoom: (anchor: ScreenPoint, scale: number) => void
     onpan: (dx: number, dy: number) => void
     onresize: (size: { width: number; height: number }) => void
+    /** How long one composite took. A single frame says nothing; a second of them says plenty. */
+    onrendered: (ms: number) => void
   }
 
   const {
@@ -54,6 +56,7 @@
     onzoom,
     onpan,
     onresize,
+    onrendered,
   }: Props = $props()
 
   let canvas: HTMLCanvasElement | null = $state(null)
@@ -90,8 +93,10 @@
     const previewScale = preview.width / image.width
     const source: ColorSource = viewport.scale > previewScale ? image : preview
 
+    const started = performance.now()
     renderViewport(source, mask, image, viewport, size, framebuffer.data, background)
     context.putImageData(framebuffer, 0, 0)
+    onrendered(performance.now() - started)
   }
 
   $effect(() => {

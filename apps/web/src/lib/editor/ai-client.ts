@@ -10,11 +10,19 @@ import type { KirilyError } from '@kirily/contract/error'
 import { KirilyErrorCode, kirilyError } from '@kirily/contract/error'
 import type { Result } from '@kirily/contract/result'
 import { err, ok } from '@kirily/contract/result'
+import type { Timings } from '@kirily/contract/timing'
 import type { AiRequest, AiResponse } from '../workers/ai-protocol.ts'
 
 export type WorkerProviderDeps = {
   /** Creating the worker is injected so this can be tested without one. */
   readonly createWorker: () => Worker
+  /**
+   * The worker's own readings, forwarded as they arrive. They are on the
+   * worker's clock, so they are recorded rather than measured again here —
+   * timing the round trip would fold the download, the compile and the
+   * forward pass into one useless number.
+   */
+  readonly onTimings?: (timings: Timings) => void
 }
 
 export const createWorkerProvider = (deps: WorkerProviderDeps): BackgroundRemovalProvider => {
@@ -90,6 +98,7 @@ export const createWorkerProvider = (deps: WorkerProviderDeps): BackgroundRemova
       send<void>({ type: 'initialize' }, [], onProgress, (response) => {
         if (response.type !== 'ready') return null
         info = { id: response.providerId, label: response.label, requiresUpload: false }
+        deps.onTimings?.(response.timings)
         return ok(undefined)
       }),
 
@@ -112,6 +121,7 @@ export const createWorkerProvider = (deps: WorkerProviderDeps): BackgroundRemova
         (response) => {
           if (response.type !== 'result') return null
           info = { ...info, id: response.providerId }
+          deps.onTimings?.(response.timings)
           return ok({
             width: response.width,
             height: response.height,

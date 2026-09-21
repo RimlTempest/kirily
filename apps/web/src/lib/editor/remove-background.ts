@@ -13,6 +13,8 @@ import type { BackgroundRemovalProvider } from '@kirily/ai/provider'
 import type { KirilyError } from '@kirily/contract/error'
 import type { Result } from '@kirily/contract/result'
 import { err, ok } from '@kirily/contract/result'
+import type { Recorder } from '@kirily/contract/timing'
+import { Stage, createStopwatch, replayTimings } from '@kirily/contract/timing'
 import type { ColourField } from '@kirily/image-core/field'
 import { BACKGROUND_FIELD, FOREGROUND_FIELD, estimateField } from '@kirily/image-core/field'
 import { DEFAULT_REFINE, refineRadiusFor } from '@kirily/image-core/guided'
@@ -30,6 +32,8 @@ export type RemoveBackgroundDeps = {
   readonly onInferenceStart: () => void
   /** Called when refinement is skipped. Separated so tests can observe it. */
   readonly onRefineSkipped?: (error: KirilyError) => void
+  /** Where the mask stages report to. Defaults to nowhere. */
+  readonly record?: Recorder
 }
 
 export type RemovedBackground = {
@@ -74,20 +78,31 @@ export const removeBackground = async (
   if (!segmented.ok) return err(segmented.error)
 
   const alpha = segmented.value.alpha
-  const refined = (await deps.engine()).refineMask(image.rgba, alpha, image.source, {
-    ...DEFAULT_REFINE,
-    radius: refineRadiusFor(image.source),
-  })
+  const clock = createStopwatch(() => performance.now())
+  const engine = await deps.engine()
+  const refined = clock.measure(Stage.MaskRefine, () =>
+    engine.refineMask(image.rgba, alpha, image.source, {
+      ...DEFAULT_REFINE,
+      radius: refineRadiusFor(image.source),
+    }),
+  )
   if (!refined.ok) deps.onRefineSkipped?.(refined.error)
 
   // Last, and at full resolution: the guided filter pulls the model's outline
   // towards the image's, and this decides the outline from the image's own
   // pixels. Running it before refinement would hand the filter an edge it
   // would then soften again.
+  // Both fields are inside the measurement: estimating them is most of the
+  // cost, and the background one is only computed here because matting needs
+  // it — decontamination gets it for free afterwards.
   const background = estimateField(image.rgba, image.source, alpha, BACKGROUND_FIELD)
-  const foreground = estimateField(image.rgba, image.source, alpha, FOREGROUND_FIELD)
-  const matted = colourMatte(image.rgba, alpha, image.source, { background, foreground })
+  const matted = clock.measure(Stage.MaskMatte, () => {
+    const foreground = estimateField(image.rgba, image.source, alpha, FOREGROUND_FIELD)
+    return colourMatte(image.rgba, alpha, image.source, { background, foreground })
+  })
   if (!matted.ok) deps.onRefineSkipped?.(matted.error)
+
+  if (deps.record !== undefined) replayTimings(clock.timings(), deps.record)
 
   return ok({ alpha, providerId: deps.provider.info.id, refined: refined.ok, background })
 }
