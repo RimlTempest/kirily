@@ -28,7 +28,7 @@ import { canRedo, canUndo } from '@kirily/editor-core/history'
 import { resample } from '@kirily/editor-core/commands'
 import { fullCrop } from '@kirily/editor-core/crop'
 import { composeMask } from '@kirily/image-core/mask'
-import { WHITE } from '@kirily/image-core/composite'
+import type { Rgb } from '@kirily/image-core/composite'
 import { budgetFor } from '@kirily/image-core/preview'
 import type { ImageEngine } from '@kirily/wasm'
 import { loadImageEngine } from '@kirily/wasm'
@@ -41,6 +41,8 @@ import { removeBackground as removeBackgroundFlow } from './remove-background.ts
 import { decodeFile } from './decode.ts'
 import type { ExportFormat } from './export.ts'
 import { downloadBlob, exportImage, extensionFor } from './export.ts'
+import type { ExportSettings } from './export-settings.ts'
+import { DEFAULT_EXPORT, withBackground, withFormat, withQuality } from './export-settings.ts'
 
 export type EditorStore = ReturnType<typeof createEditorStore>
 
@@ -85,6 +87,12 @@ export const createEditorStore = (
    * hand-painted mask gives no basis for saying what was behind the subject.
    */
   let backgroundField = $state.raw<ColourField | null>(null)
+
+  /**
+   * Kept for the session rather than per export: someone who picked WebP at
+   * 80% means it for the next one too.
+   */
+  let exportSettings = $state.raw<ExportSettings>(DEFAULT_EXPORT)
 
   /**
    * Where the time went, for the run the user is looking at.
@@ -149,6 +157,19 @@ export const createEditorStore = (
     /** Called by the canvas after each composite. */
     recordRender(ms: number): void {
       record(Stages.PreviewRender, ms)
+    },
+
+    get exportSettings(): ExportSettings {
+      return exportSettings
+    },
+    setExportFormat(format: ExportFormat): void {
+      exportSettings = withFormat(exportSettings, format)
+    },
+    setExportQuality(quality: number): void {
+      exportSettings = withQuality(exportSettings, quality)
+    },
+    setExportBackground(background: Rgb): void {
+      exportSettings = withBackground(exportSettings, background)
     },
     get viewport(): Viewport {
       return editor?.viewport ?? { scale: 1, offsetX: 0, offsetY: 0 }
@@ -320,8 +341,9 @@ export const createEditorStore = (
       recompose()
     },
 
-    download: async (format: ExportFormat): Promise<void> => {
+    download: async (): Promise<void> => {
       if (editor === null || decoded === null) return
+      const { format } = exportSettings
       editor = withStatus(editor, { kind: 'exporting' })
 
       // The engine is loaded outside the measurement: on a first export that
@@ -336,8 +358,8 @@ export const createEditorStore = (
       }
       const request = {
         format,
-        quality: 0.92,
-        background: WHITE,
+        quality: exportSettings.quality,
+        background: exportSettings.background,
         rect: exportRect(editor),
       }
       const result = await clock.measureAsync(Stages.Export, () =>

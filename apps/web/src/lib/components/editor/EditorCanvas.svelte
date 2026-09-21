@@ -43,6 +43,16 @@
     onrendered: (ms: number) => void
     /** Forces the CPU path. Only the renderer equality test sets this. */
     forceCanvas?: boolean
+    /**
+     * What sits behind the transparency, as a CSS colour, or null for the
+     * checkerboard.
+     *
+     * JPEG has no alpha, so the file will have this baked in. Showing a
+     * checkerboard while the user picks the colour would mean picking it
+     * blind, and the preview would stop being what the export writes
+     * (kirily-design.md §16).
+     */
+    backdrop?: string | null
   }
 
   const {
@@ -62,6 +72,7 @@
     onresize,
     onrendered,
     forceCanvas = false,
+    backdrop = null,
   }: Props = $props()
 
   let canvas: HTMLCanvasElement | null = $state(null)
@@ -271,7 +282,9 @@
 -->
 <div
   bind:this={frame}
-  class="checkerboard absolute inset-0 overflow-hidden rounded-[var(--radius-panel)]"
+  class="absolute inset-0 overflow-hidden rounded-[var(--radius-panel)]"
+  class:checkerboard={backdrop === null}
+  style:background={backdrop ?? undefined}
 >
   <canvas
     bind:this={canvas}

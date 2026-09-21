@@ -12,10 +12,21 @@
   import ZoomControls from '$lib/components/editor/ZoomControls.svelte'
   import Toolbar from '$lib/components/editor/Toolbar.svelte'
   import { createEditorStore } from '$lib/editor/editor-store.svelte.ts'
-  import { ExportFormat } from '$lib/editor/export.ts'
+  import ExportPanel from '$lib/components/editor/ExportPanel.svelte'
+  import { needsBackground, toHex } from '$lib/editor/export-settings.ts'
   import { pendingFile } from '$lib/editor/pending-file.svelte.ts'
 
   const store = createEditorStore()
+
+  /**
+   * What the canvas sits on. JPEG cannot keep the transparency, so the colour
+   * chosen for it is shown behind the cut-out rather than a checkerboard —
+   * otherwise the colour is picked blind and the preview stops matching the
+   * file.
+   */
+  const exportBackdrop = $derived(
+    needsBackground(store.exportSettings.format) ? toHex(store.exportSettings.background) : null,
+  )
 
   /**
    * Read once, on mount. A developer's instrument: it stays off unless asked
@@ -163,6 +174,7 @@
           version={store.maskVersion}
           background={store.background}
           onrendered={(ms) => store.recordRender(ms)}
+          backdrop={exportBackdrop}
           {forceCanvas}
           viewport={store.viewport}
           {painting}
@@ -228,14 +240,14 @@
           <span class="opacity-70">· {modelLabel}</span>
         {/if}
       </p>
-      <button
-        type="button"
-        class="rounded-full bg-ink px-6 py-3 font-bold text-surface transition-opacity hover:opacity-85 disabled:opacity-50"
-        disabled={busy}
-        onclick={() => void store.download(ExportFormat.Png)}
-      >
-        ⬇️ PNG で書き出す
-      </button>
+      <ExportPanel
+        settings={store.exportSettings}
+        {busy}
+        onformat={(format) => store.setExportFormat(format)}
+        onquality={(quality) => store.setExportQuality(quality)}
+        onbackground={(background) => store.setExportBackground(background)}
+        onexport={() => void store.download()}
+      />
     </footer>
   {/if}
 </main>
