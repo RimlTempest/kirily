@@ -16,6 +16,13 @@ const scan = async (page: Page) =>
 
 test('the landing page has no accessibility violations', async ({ page }) => {
   await page.goto('/')
+  // The title is written by the page once it has started, so waiting for it
+  // waits for that. Without it, axe scanned the un-hydrated document and
+  // reported forty-three violations — every one of them the absence of a page
+  // rather than a fault in it. It only showed up against a deployment, where
+  // loading takes longer than it does from localhost.
+  await expect(page).toHaveTitle(/Kirily/)
+
   const results = await scan(page)
   expect(results.violations).toEqual([])
 })

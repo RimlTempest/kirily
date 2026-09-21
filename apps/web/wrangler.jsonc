@@ -19,10 +19,16 @@
   // Cloudflare creates the DNS record and manages the certificate. Declared
   // here rather than clicked in the dashboard, so the domain this answers on
   // is part of the repository and a change to it shows up in a diff.
-  //
-  // `workers.dev` stays on as well, because it is the address that keeps
-  // working while DNS or a certificate is still settling.
   "routes": [{ "pattern": "kirily.riml4i.com", "custom_domain": true }],
+
+  // Spelled out, because adding `routes` already turns it off: wrangler infers
+  // `workers_dev: false` when routes are present and says nothing about it.
+  // The site had two addresses, then one, and nothing in this file recorded
+  // the change. Now it does.
+  //
+  // Set it to true if a second address is wanted while DNS is settling; the
+  // cost is two public URLs serving the same site.
+  "workers_dev": false,
 
   // R2 / KV / D1 bindings are deliberately absent. The MVP processes images in
   // the browser and stores nothing (kirily-design.md §22, §43). Adding a

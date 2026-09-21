@@ -86,8 +86,12 @@ R2 / KV / D1 が**無いこと**自体が設計であり、CI が検査してい
 ダッシュボードで足さずに設定に書くのは、**このサイトがどこで応答するかを
 リポジトリの一部にする**ため。ダッシュボードで足したものは diff に出ない。
 
-`workers.dev` は残してある。DNS や証明書が落ち着くまでの間、
-動き続ける住所があったほうがよい。
+`workers.dev` は**無効**。`routes` を足すと wrangler が
+`workers_dev: false` と推論するためで、**何も言わずにそうなる**。
+実際、ドメインを足したデプロイで `kirily-web.riml.workers.dev` は 404 になった。
+
+推論に任せず `wrangler.jsonc` に書いてある。設定ファイルを読めば
+どの住所で応答するかが分かる、という状態にしておくため。
 
 条件は 2 つで、どちらも満たしている。
 
@@ -112,7 +116,34 @@ R2 / KV / D1 が**無いこと**自体が設計であり、CI が検査してい
 **`vite preview` は `_headers` を解釈しない。** `wrangler dev` は解釈する
 （起動時に「Parsed N valid header rules」と言う）ので、確認はそちらで。
 
+## ゾーンの機能に注意する
+
+`riml4i.com` のゾーンで **Cloudflare Web Analytics（Browser Insights）が
+有効**になっていて、`static.cloudflareinsights.com/beacon.min.js` を
+全ページに注入してくる。
+
+**CSP が弾いている。** `script-src 'self'` にサードパーティは入っていない。
+コンソールにエラーが出るが、**アプリは正常に動く**（ハイドレートも表示も問題ない）。
+
+CSP に足して通すべきではない。トップページは「この画像はブラウザ内で
+処理されます」と約束していて、**第三者のビーコンはその約束と両立しない。**
+`svelte.config.js` が「依存が行儀悪くしても守られるように」と書いている、
+まさにその働きをしている。
+
+直すならゾーン側で切る。dash → riml4i.com → Analytics → Web Analytics を無効に。
+切らない限りビーコンは弾かれ続け、**計測もされないままコンソールに
+エラーだけが出る**状態になる。
+
 ## 出した後に確かめること
+
+E2E をそのまま本番へ向けられる。これが一番早い。
+
+```bash
+cd tests/e2e
+KIRILY_E2E_URL=https://kirily.riml4i.com bunx playwright test --project=desktop
+```
+
+手で見るなら:
 
 1. トップが出る
 2. 画像を 1 枚入れて「背景をきりり」→ 状態表示が **「簡易処理」でない**こと
