@@ -11,6 +11,13 @@ import { defineConfig, devices } from '@playwright/test'
  * via `KIRILY_E2E_WEBKIT=1` rather than silently skipped, so nobody believes
  * they have Safari coverage when they do not.
  */
+/**
+ * Not 4173. That is Vite's default, so every other project on the machine is
+ * a candidate to be sitting on it, and `reuseExistingServer` cannot tell the
+ * difference between our preview server and someone else's.
+ */
+const PORT = 4319
+
 const webkit = process.env['KIRILY_E2E_WEBKIT'] === '1'
 
 /**
@@ -28,7 +35,7 @@ export default defineConfig({
   retries: process.env['CI'] ? 2 : 0,
   reporter: process.env['CI'] ? [['html'], ['github']] : [['list']],
   use: {
-    baseURL: 'http://localhost:4173',
+    baseURL: `http://localhost:${PORT}`,
     trace: 'on-first-retry',
   },
   projects: [
@@ -48,8 +55,11 @@ export default defineConfig({
     ...(webkit ? [{ name: 'mobile-safari', use: { ...devices['iPhone 15'] } }] : []),
   ],
   webServer: {
-    command: 'bun run --filter @kirily/web preview',
-    url: 'http://localhost:4173',
+    command: `bun run --filter @kirily/web preview -- --port ${PORT} --strictPort`,
+    url: `http://localhost:${PORT}`,
+    // Reused for speed, which is only safe because the port is ours. On 4173,
+    // Vite's default, a preview server from another project answered and a
+    // whole run went green against somebody else's 404 page.
     reuseExistingServer: !process.env['CI'],
     timeout: 120_000,
   },
