@@ -3,22 +3,14 @@ import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { alphaOnImage, imageRect, pointOnImage } from './canvas.ts'
+import { alphaAt, alphaOnImage, imageRect, pointOnImage } from './canvas.ts'
 
 /** Alpha of the composited canvas directly under a page-space point. */
 const alphaUnderPointer = async (page: Page, point: { x: number; y: number }): Promise<number> => {
   const box = await page.getByLabel('編集中の画像').boundingBox()
   if (box === null) return 0
-  return page.evaluate(
-    ({ x, y }) => {
-      const canvas = document.querySelector('canvas')
-      if (!(canvas instanceof HTMLCanvasElement)) return 0
-      const context = canvas.getContext('2d', { willReadFrequently: true })
-      if (context === null) return 0
-      return context.getImageData(Math.round(x), Math.round(y), 1, 1).data[3] ?? 0
-    },
-    { x: point.x - box.x, y: point.y - box.y },
-  )
+  const read = await alphaAt(page, { spot: { x: point.x - box.x, y: point.y - box.y } })
+  return read['spot'] ?? 0
 }
 
 /**
@@ -191,16 +183,9 @@ test('painting lands where the pointer is, even when zoomed in', async ({ page }
   await page.mouse.up()
 
   // The stroke removed part of the subject at the centre of the view.
-  const alpha = await page.evaluate(() => {
-    const canvas = document.querySelector('canvas')
-    if (!(canvas instanceof HTMLCanvasElement)) return null
-    const context = canvas.getContext('2d', { willReadFrequently: true })
-    if (context === null) return null
-    return context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1)
-      .data[3]
-  })
+  const read = await alphaAt(page, { middle: { x: box.width / 2, y: box.height / 2 } })
 
-  expect(alpha).toBeLessThan(128)
+  expect(read['middle']).toBeLessThan(128)
 })
 
 test('cropping changes what the export writes, at the original resolution', async ({ page }) => {

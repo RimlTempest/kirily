@@ -22,8 +22,12 @@
    * for, so it never covers a user's image (`?timings=1`).
    */
   let showTimings = $state(false)
+  /** `?renderer=canvas` forces the CPU path; the equality test needs both. */
+  let forceCanvas = $state(false)
   onMount(() => {
-    showTimings = new URLSearchParams(globalThis.location.search).get('timings') === '1'
+    const query = new URLSearchParams(globalThis.location.search)
+    showTimings = query.get('timings') === '1'
+    forceCanvas = query.get('renderer') === 'canvas'
   })
 
   let tool = $state<EditorTool>(EditorTool.BrushRemove)
@@ -159,6 +163,7 @@
           version={store.maskVersion}
           background={store.background}
           onrendered={(ms) => store.recordRender(ms)}
+          {forceCanvas}
           viewport={store.viewport}
           {painting}
           {filling}

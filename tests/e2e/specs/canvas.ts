@@ -40,6 +40,36 @@ export const pointOnImage = (
 })
 
 /**
+ * Alpha at canvas-space points.
+ *
+ * Copied through a bitmap rather than read in place: a canvas keeps one kind
+ * of context for life, and the editor's is WebGL whenever the GPU renderer
+ * took it, so `getContext('2d')` on it would hand back null.
+ */
+export const alphaAt = async (
+  page: Page,
+  points: Readonly<Record<string, { x: number; y: number }>>,
+): Promise<Record<string, number>> =>
+  page.evaluate(async (wanted) => {
+    const canvas = document.querySelector('canvas')
+    if (!(canvas instanceof HTMLCanvasElement)) return {}
+    const bitmap = await createImageBitmap(canvas)
+    const copy = new OffscreenCanvas(bitmap.width, bitmap.height)
+    const context = copy.getContext('2d', { willReadFrequently: true })
+    if (context === null) return {}
+    context.drawImage(bitmap, 0, 0)
+    const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height)
+
+    const out: Record<string, number> = {}
+    for (const [name, point] of Object.entries(wanted)) {
+      const x = Math.min(bitmap.width - 1, Math.max(0, Math.round(point.x)))
+      const y = Math.min(bitmap.height - 1, Math.max(0, Math.round(point.y)))
+      out[name] = data[(y * bitmap.width + x) * 4 + 3] ?? 0
+    }
+    return out
+  }, points)
+
+/**
  * Alpha of the composited canvas at fractions across the *image*.
  *
  * Reads through the same mapping, so a probe means the same thing whatever the
@@ -57,17 +87,25 @@ export const alphaOnImage = async (
   if (box === null) return {}
 
   return page.evaluate(
-    ({ spots: points, originX, originY, side }) => {
+    async ({ spots: points, originX, originY, side }) => {
       const canvas = document.querySelector('canvas')
       if (!(canvas instanceof HTMLCanvasElement)) return {}
-      const context = canvas.getContext('2d', { willReadFrequently: true })
+
+      // Copied through a bitmap rather than read in place: a canvas keeps one
+      // kind of context for life, and the editor's is WebGL whenever the GPU
+      // renderer took it, so `getContext('2d')` here would hand back null.
+      const bitmap = await createImageBitmap(canvas)
+      const copy = new OffscreenCanvas(bitmap.width, bitmap.height)
+      const context = copy.getContext('2d', { willReadFrequently: true })
       if (context === null) return {}
+      context.drawImage(bitmap, 0, 0)
+      const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height)
 
       const out: Record<string, number> = {}
       for (const [name, [fx, fy]] of Object.entries(points)) {
-        const x = Math.min(canvas.width - 1, Math.round(originX + side * fx))
-        const y = Math.min(canvas.height - 1, Math.round(originY + side * fy))
-        out[name] = context.getImageData(x, y, 1, 1).data[3] ?? 0
+        const x = Math.min(bitmap.width - 1, Math.round(originX + side * fx))
+        const y = Math.min(bitmap.height - 1, Math.round(originY + side * fy))
+        out[name] = data[(y * bitmap.width + x) * 4 + 3] ?? 0
       }
       return out
     },

@@ -48,7 +48,7 @@
 
 - [x] 段ごとの計測（decode / ai*load / ai_inference / mask*\* / preview_render / export、ADR-0015）
 - [x] AI Worker（`ArrayBuffer` 転送）
-- [ ] **WebGL レンダラ** — 計測で名指しされたボトルネック。Retina 全画面で 84.6ms/フレーム（12fps）
+- [x] WebGL レンダラ（メインスレッド 55.78ms → 0.02ms/フレーム、Canvas 2D は残す、ADR-0016）
 - [x] 表示領域だけを合成（コストが画像サイズではなく画面サイズで頭打ちになる）
 - [ ] ~~画素演算の Worker 化~~ — `mask_refine` + `mask_matte` で 80ms。AI の 1171ms の横では優先度が低い（ADR-0015）
 - [ ] ~~タイル処理（8K 以上）~~ — `decode` 3〜8ms、`export` 43ms。8K で測り直してから

@@ -15,6 +15,8 @@
   import type { ColourField } from '@kirily/image-core/field'
   import type { ColorSource } from '@kirily/image-core/viewport'
   import { renderViewport } from '@kirily/image-core/viewport'
+  import type { Renderer } from '$lib/render/webgl.ts'
+  import { createWebglRenderer } from '$lib/render/webgl.ts'
 
   type Props = {
     /** Full-resolution pixels. */
@@ -39,6 +41,8 @@
     onresize: (size: { width: number; height: number }) => void
     /** How long one composite took. A single frame says nothing; a second of them says plenty. */
     onrendered: (ms: number) => void
+    /** Forces the CPU path. Only the renderer equality test sets this. */
+    forceCanvas?: boolean
   }
 
   const {
@@ -57,6 +61,7 @@
     onpan,
     onresize,
     onrendered,
+    forceCanvas = false,
   }: Props = $props()
 
   let canvas: HTMLCanvasElement | null = $state(null)
@@ -74,8 +79,38 @@
   /** Reused across frames: at 1200x800 this is 3.8 MB. */
   let framebuffer: ImageData | null = null
 
+  /**
+   * Chosen once, on the first draw, and never revisited.
+   *
+   * A canvas hands out one kind of context for its lifetime: asking for `2d`
+   * after `webgl2` returns null, so "try the GPU and fall back later" is not a
+   * thing this API allows. Falling back means falling back before the first
+   * frame, which is also when `createWebglRenderer` reports whether it can.
+   */
+  let gpu: Renderer | null = null
+  let decided = false
+
   const draw = (): void => {
     if (canvas === null || size.width === 0 || size.height === 0) return
+
+    if (!decided) {
+      decided = true
+      gpu = forceCanvas ? null : createWebglRenderer(canvas)
+    }
+
+    // Zoomed out, read the preview: it was downscaled by the browser with a
+    // proper filter, so it stands in for a mip level. Zoomed in, read the
+    // original — that is the whole point of zooming in.
+    const previewScale = preview.width / image.width
+    const source: ColorSource = viewport.scale > previewScale ? image : preview
+
+    const started = performance.now()
+    if (gpu !== null) {
+      gpu.render({ color: source, mask, image, viewport, background, maskVersion: version }, size)
+      onrendered(performance.now() - started)
+      return
+    }
+
     const context = canvas.getContext('2d')
     if (context === null) return
 
@@ -86,18 +121,12 @@
     ) {
       framebuffer = new ImageData(size.width, size.height)
     }
-
-    // Zoomed out, read the preview: it was downscaled by the browser with a
-    // proper filter, so it stands in for a mip level. Zoomed in, read the
-    // original — that is the whole point of zooming in.
-    const previewScale = preview.width / image.width
-    const source: ColorSource = viewport.scale > previewScale ? image : preview
-
-    const started = performance.now()
     renderViewport(source, mask, image, viewport, size, framebuffer.data, background)
     context.putImageData(framebuffer, 0, 0)
     onrendered(performance.now() - started)
   }
+
+  $effect(() => () => gpu?.dispose())
 
   $effect(() => {
     // Re-read each input so the effect runs when any of them changes.
