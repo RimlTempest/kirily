@@ -171,12 +171,91 @@ export type SolidifyOptions = {
   readonly edgeBand: number
   /** How many pixels it takes to ramp from untouched to fully closed. */
   readonly ramp: number
+  /**
+   * An enclosed patch of background smaller than this share of the image is
+   * closed outright, on the grounds that nothing that small is a real hole.
+   */
+  readonly maxEnclosedFraction: number
 }
 
 export const DEFAULT_SOLIDIFY: SolidifyOptions = {
   backgroundBelow: 24,
   edgeBand: 6,
   ramp: 8,
+  // Measured on `pale-subject-on-white.png`, where IS-Net punches holes through
+  // a white hair highlight: the largest false hole is 0.05% of the image and
+  // the smallest real one in the evaluation set is 6.6%. This sits twice above
+  // the false and sixty times below the real (ADR-0012).
+  maxEnclosedFraction: 0.001,
+}
+
+/**
+ * Fills enclosed background patches that are too small to be real holes.
+ *
+ * A model reports background wherever the subject happens to look like the
+ * background, and it is most confident exactly where it is most wrong — a
+ * white highlight in dark hair comes back as a clean hole rather than as
+ * uncertainty, so `solidifyInterior`'s "leave what the model is sure about"
+ * rule protects the error instead of a mug handle.
+ *
+ * Area is what separates the two. A handle, a gap between arms, the middle of
+ * a ring: all of them are orders of magnitude larger than the speckle a model
+ * leaves behind. Colour does not separate them, because the case that needs
+ * fixing is a white highlight against a white background.
+ *
+ * Set hard rather than ramped: the patch is surrounded by subject on every
+ * side, so there is no outline here to protect.
+ */
+const closeSpecks = (
+  mask: Uint8Array,
+  size: { readonly width: number; readonly height: number },
+  ring: Uint8Array,
+  limit: number,
+  options: SolidifyOptions,
+): void => {
+  if (limit < 1) return
+  const { width, height } = size
+  const pixels = width * height
+
+  const visited = new Uint8Array(pixels)
+  const stack = new Int32Array(pixels)
+  const patch: number[] = []
+
+  for (let start = 0; start < pixels; start += 1) {
+    if (visited[start] === 1 || ring[start] === 1) continue
+    if ((mask[start] ?? 0) > options.backgroundBelow) continue
+
+    patch.length = 0
+    let top = 0
+    stack[top++] = start
+    visited[start] = 1
+    let area = 0
+
+    while (top > 0) {
+      const index = stack[--top] ?? 0
+      area += 1
+      // Past the limit this is a real hole; keep walking to mark it visited,
+      // but stop remembering pixels nobody is going to fill.
+      if (area <= limit) patch.push(index)
+
+      const x = index % width
+      const y = (index - x) / width
+      const walk = (neighbour: number): void => {
+        if (visited[neighbour] === 1 || ring[neighbour] === 1) return
+        if ((mask[neighbour] ?? 0) > options.backgroundBelow) return
+        visited[neighbour] = 1
+        stack[top++] = neighbour
+      }
+      if (x > 0) walk(index - 1)
+      if (x < width - 1) walk(index + 1)
+      if (y > 0) walk(index - width)
+      if (y < height - 1) walk(index + width)
+    }
+
+    if (area <= limit) {
+      for (const index of patch) mask[index] = MASK_OPAQUE
+    }
+  }
 }
 
 /**
@@ -249,6 +328,11 @@ export const solidifyInterior = (
     if (y > 0) seed(index - width)
     if (y < height - 1) seed(index + width)
   }
+
+  // `ring[i] === 1` now means exactly "background the image border can reach".
+  // Everything the model called background and this flood did not reach is a
+  // hole, and the small ones are mistakes rather than holes.
+  closeSpecks(mask, size, ring, Math.floor(pixels * options.maxEnclosedFraction), options)
 
   const reach = Math.min(MAX_RING - 1, options.edgeBand + options.ramp)
   let frontierStart = 0

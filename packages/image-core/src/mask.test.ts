@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { imagePoint } from '@kirily/contract/geometry'
 import { DEFAULT_BRUSH } from '@kirily/contract/mask'
 import {
+  DEFAULT_SOLIDIFY,
   composeMask,
   createMaskLayers,
   layerFor,
@@ -153,7 +154,9 @@ const subject = (size: number, interior: (x: number, y: number) => number | null
 
 describe('solidifyInterior', () => {
   const size = { width: 24, height: 24 }
-  const options = { backgroundBelow: 24, edgeBand: 2, ramp: 0 }
+  // Speck closing off: these cover the ramp, and a 24x24 image is small enough
+  // that any fraction would round the limit to zero anyway.
+  const options = { backgroundBelow: 24, edgeBand: 2, ramp: 0, maxEnclosedFraction: 0 }
 
   test('fills a low-confidence patch inside the subject', () => {
     const mask = subject(24, (x, y) => (x > 9 && x < 15 && y > 9 && y < 15 ? 160 : null))
@@ -192,7 +195,7 @@ describe('solidifyInterior', () => {
     // A wide subject with an unsure interior: the pixel just past the band is
     // only partly raised, the one deep inside is fully opaque.
     const mask = subject(24, (x, y) => (x > 3 && x < 21 && y > 3 && y < 21 ? 100 : null))
-    solidifyInterior(mask, size, { backgroundBelow: 24, edgeBand: 2, ramp: 4 })
+    solidifyInterior(mask, size, { ...options, ramp: 4 })
 
     const nearEdge = mask[5 * 24 + 12] ?? 0
     const deepInside = mask[12 * 24 + 12] ?? 0
@@ -217,5 +220,61 @@ describe('solidifyInterior', () => {
     const mask = new Uint8Array(16)
     solidifyInterior(mask, { width: 4, height: 4 }, options)
     expect(Array.from(mask).every((v) => v === 0)).toBe(true)
+  })
+})
+
+describe('solidifyInterior and enclosed specks', () => {
+  const SIZE = 100
+  const size = { width: SIZE, height: SIZE }
+
+  /** A solid subject filling the middle, with a rectangular hole punched in it. */
+  const subjectWithHole = (hole: { x: number; y: number; w: number; h: number }): Uint8Array => {
+    const mask = new Uint8Array(SIZE * SIZE)
+    for (let y = 10; y < 90; y += 1) {
+      for (let x = 10; x < 90; x += 1) mask[y * SIZE + x] = 255
+    }
+    for (let y = hole.y; y < hole.y + hole.h; y += 1) {
+      for (let x = hole.x; x < hole.x + hole.w; x += 1) mask[y * SIZE + x] = 0
+    }
+    return mask
+  }
+
+  const alphaAt = (mask: Uint8Array, x: number, y: number): number => mask[y * SIZE + x] ?? 0
+
+  test('closes a speck of background that the subject surrounds', () => {
+    // 9 px in a 10 000 px image: 0.09%, just under the 0.1% limit.
+    const mask = subjectWithHole({ x: 48, y: 48, w: 3, h: 3 })
+    solidifyInterior(mask, size)
+    expect(alphaAt(mask, 49, 49)).toBe(255)
+  })
+
+  test('keeps a hole that is large enough to be something', () => {
+    const mask = subjectWithHole({ x: 35, y: 35, w: 30, h: 30 })
+    solidifyInterior(mask, size)
+    expect(alphaAt(mask, 50, 50)).toBe(0)
+  })
+
+  test('never closes background that reaches the image border', () => {
+    const mask = new Uint8Array(SIZE * SIZE)
+    for (let y = 10; y < 90; y += 1) {
+      for (let x = 10; x < 90; x += 1) mask[y * SIZE + x] = 255
+    }
+    solidifyInterior(mask, size)
+    expect(alphaAt(mask, 2, 2)).toBe(0)
+    expect(alphaAt(mask, 50, 5)).toBe(0)
+  })
+
+  test('measures the limit as a share of the image, not a pixel count', () => {
+    const generous = { ...DEFAULT_SOLIDIFY, maxEnclosedFraction: 0.2 }
+    const strict = { ...DEFAULT_SOLIDIFY, maxEnclosedFraction: 0.000_1 }
+    const hole = { x: 40, y: 40, w: 20, h: 20 }
+
+    const filled = subjectWithHole(hole)
+    solidifyInterior(filled, size, generous)
+    expect(alphaAt(filled, 50, 50)).toBe(255)
+
+    const kept = subjectWithHole(hole)
+    solidifyInterior(kept, size, strict)
+    expect(alphaAt(kept, 50, 50)).toBe(0)
   })
 })
