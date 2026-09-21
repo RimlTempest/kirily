@@ -13,6 +13,8 @@ import { err, ok } from '@kirily/contract/result'
 import type { Rgb } from '@kirily/image-core/composite'
 import type { Backdrop } from '@kirily/image-core/backdrop'
 import { compositeBackdrop } from '@kirily/image-core/backdrop'
+import type { Placement } from '@kirily/image-core/placement'
+import { isPlaced, placedSample } from '@kirily/image-core/placement'
 import { decontaminate } from '@kirily/image-core/decontaminate'
 import type { ColourField } from '@kirily/image-core/field'
 import type { ImageEngine } from '@kirily/wasm'
@@ -36,6 +38,10 @@ export type ExportRequest = {
   readonly background: Rgb
   /** An image to put behind the cut-out, framed to cover the whole picture. */
   readonly backdrop: Backdrop | null
+  /** Where that image was dragged to, on top of the cover fit. */
+  readonly backdropPlacement: Placement
+  /** Where the cut-out was dragged to, in the original's pixels. */
+  readonly subjectPlacement: Placement
   /** True to flatten onto `background` even in a format that could keep alpha. */
   readonly flatten: boolean
   readonly rect: Rect
@@ -70,10 +76,18 @@ export const exportImage = async (
 ): Promise<Result<Blob, KirilyError>> => {
   const { rect } = request
   const cropped = new Uint8ClampedArray(rect.width * rect.height * 4)
-  const crop = engine.cropRgba(source.rgba, source, rect, cropped)
-  if (!crop.ok) return crop
+  const croppedMask = new Uint8Array(rect.width * rect.height)
 
-  const croppedMask = cropMask(source.mask, source, rect)
+  if (isPlaced(request.subjectPlacement)) {
+    // The cut-out has been dragged, so the crop is no longer a rectangle of
+    // the original: each output pixel has to be told where to read from.
+    gather(source, rect, request.subjectPlacement, cropped, croppedMask)
+  } else {
+    const crop = engine.cropRgba(source.rgba, source, rect, cropped)
+    if (!crop.ok) return crop
+    croppedMask.set(cropMask(source.mask, source, rect))
+  }
+
   const masked = engine.applyAlphaMask(cropped, croppedMask, rect)
   if (!masked.ok) return masked
 
@@ -88,13 +102,46 @@ export const exportImage = async (
   // the correction, the correction has to be done before anything reads the
   // colour, and flattening throws the alpha away so it goes last.
   if (request.backdrop !== null) {
-    compositeBackdrop(cropped, rect, request.backdrop, rect, source)
+    compositeBackdrop(cropped, rect, request.backdrop, rect, source, request.backdropPlacement)
   } else if (request.flatten || request.format === ExportFormat.Jpeg) {
     const flattened = engine.flattenOnto(cropped, rect, request.background)
     if (!flattened.ok) return flattened
   }
 
   return encode(cropped, rect, request)
+}
+
+/**
+ * Reads the moved cut-out into the output rectangle.
+ *
+ * Nearest neighbour rather than a resample: at scale 1 — a plain move, which
+ * is what this is for — the mapping is exact and anything else would soften
+ * an edge the rest of the pipeline works to keep sharp.
+ */
+const gather = (
+  source: ExportSource,
+  rect: Rect,
+  placement: Placement,
+  colour: Uint8ClampedArray,
+  mask: Uint8Array,
+): void => {
+  const image = { width: source.width, height: source.height }
+  for (let y = 0; y < rect.height; y++) {
+    for (let x = 0; x < rect.width; x++) {
+      const from = placedSample(placement, rect.x + x, rect.y + y, image)
+      const sx = Math.round(from.x)
+      const sy = Math.round(from.y)
+      const at = (y * rect.width + x) * 4
+      if (sx < 0 || sy < 0 || sx >= source.width || sy >= source.height) continue
+
+      const read = (sy * source.width + sx) * 4
+      colour[at] = source.rgba[read] ?? 0
+      colour[at + 1] = source.rgba[read + 1] ?? 0
+      colour[at + 2] = source.rgba[read + 2] ?? 0
+      colour[at + 3] = 255
+      mask[y * rect.width + x] = source.mask[sy * source.width + sx] ?? 0
+    }
+  }
 }
 
 const cropMask = (

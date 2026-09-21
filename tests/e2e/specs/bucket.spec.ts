@@ -28,11 +28,12 @@ test.describe('bucket', () => {
     const seed = pointOnImage(rect, 0.03, 0.03)
     await page.mouse.click(seed.x, seed.y)
 
-    // Sample straight across the hair's left edge. A step would put every
-    // reading at 0 or 255; a ramp puts at least one in between.
+    // Sample straight across the hair's left edge, one image pixel at a time.
+    // The ramp is about five pixels wide, so a coarser step walks over it and
+    // the test would report a hard edge that is not there.
     const spots: Record<string, [number, number]> = {}
-    for (let i = 0; i < 24; i += 1) {
-      spots[`x${i}`] = [0.06 + i * 0.004, 0.45]
+    for (let i = 0; i < 60; i += 1) {
+      spots[`x${i}`] = [0.055 + i / SIZE, 0.45]
     }
     const alpha = await alphaOnImage(page, SIZE, spots)
     const values = Object.values(alpha)

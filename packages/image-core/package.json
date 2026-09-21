@@ -19,7 +19,8 @@
     "./select": "./src/select.ts",
     "./edge": "./src/edge.ts",
     "./blur": "./src/blur.ts",
-    "./backdrop": "./src/backdrop.ts"
+    "./backdrop": "./src/backdrop.ts",
+    "./placement": "./src/placement.ts"
   },
   "scripts": {
     "test": "bun test"

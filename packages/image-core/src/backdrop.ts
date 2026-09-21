@@ -16,6 +16,8 @@
  * (ADR-0022).
  */
 import type { Size } from './field.ts'
+import type { Placement } from './placement.ts'
+import { DEFAULT_PLACEMENT, placedSample } from './placement.ts'
 
 export type Cover = {
   /** Multiply the backdrop's pixels by this. */
@@ -56,6 +58,8 @@ export const compositeBackdrop = (
   backdrop: Backdrop,
   origin: { readonly x: number; readonly y: number },
   image: Size,
+  /** Where the user dragged and zoomed it to, on top of the cover fit. */
+  placement: Placement = DEFAULT_PLACEMENT,
 ): void => {
   if (target.length !== size.width * size.height * 4) return
   if (backdrop.rgba.length !== backdrop.width * backdrop.height * 4) return
@@ -64,11 +68,6 @@ export const compositeBackdrop = (
   if (cover.scale <= 0) return
 
   for (let y = 0; y < size.height; y += 1) {
-    // Backdrop coordinates for this row, undoing the cover fit.
-    const sourceY = Math.min(
-      backdrop.height - 1,
-      Math.max(0, Math.floor((origin.y + y - cover.offsetY) / cover.scale)),
-    )
     for (let x = 0; x < size.width; x += 1) {
       const at = (y * size.width + x) * 4
       const alpha = (target[at + 3] ?? 0) / 255
@@ -77,9 +76,16 @@ export const compositeBackdrop = (
         continue
       }
 
+      // Two steps, outermost first: undo where the user put it, then undo the
+      // cover fit that framed it.
+      const placed = placedSample(placement, origin.x + x, origin.y + y, image)
       const sourceX = Math.min(
         backdrop.width - 1,
-        Math.max(0, Math.floor((origin.x + x - cover.offsetX) / cover.scale)),
+        Math.max(0, Math.floor((placed.x - cover.offsetX) / cover.scale)),
+      )
+      const sourceY = Math.min(
+        backdrop.height - 1,
+        Math.max(0, Math.floor((placed.y - cover.offsetY) / cover.scale)),
       )
       const from = (sourceY * backdrop.width + sourceX) * 4
 

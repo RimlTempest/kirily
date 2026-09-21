@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test'
+import { expect } from '@playwright/test'
 
 /**
  * Where the image sits on screen, and how to read it.
@@ -15,7 +16,28 @@ export type ImageRect = {
   readonly height: number
 }
 
+/**
+ * Waits until the canvas's backing store matches the box it is drawn in.
+ *
+ * The editor sizes the backing store from a `ResizeObserver`, so for a frame
+ * after the layout moves — a panel appearing when the mask arrives, say — the
+ * two disagree and anything read by coordinate lands somewhere else.
+ */
+export const settled = async (page: Page): Promise<void> => {
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const canvas = document.querySelector('canvas')
+        if (!(canvas instanceof HTMLCanvasElement)) return false
+        const box = canvas.getBoundingClientRect()
+        return canvas.width === Math.round(box.width) && canvas.height === Math.round(box.height)
+      }),
+    )
+    .toBe(true)
+}
+
 export const imageRect = async (page: Page, imageSize: number): Promise<ImageRect | null> => {
+  await settled(page)
   const box = await page.getByLabel('編集中の画像').boundingBox()
   if (box === null) return null
 

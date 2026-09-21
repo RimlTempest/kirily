@@ -21,6 +21,10 @@ import { emptyHistory, execute, redo, undo } from './history.ts'
 
 export const EditorTool = {
   Pan: 'pan',
+  /** Drags the cut-out over whatever is behind it. */
+  MoveSubject: 'move-subject',
+  /** Drags the picture behind the cut-out. */
+  MoveBackdrop: 'move-backdrop',
   BrushKeep: 'brush-keep',
   BrushRemove: 'brush-remove',
   BucketKeep: 'bucket-keep',
@@ -137,6 +141,8 @@ export const modeOf = (tool: EditorTool): BrushMode | null => {
     case EditorTool.BucketRemove:
       return 'remove'
     case EditorTool.Pan:
+    case EditorTool.MoveSubject:
+    case EditorTool.MoveBackdrop:
     case EditorTool.Crop:
       return null
     default:

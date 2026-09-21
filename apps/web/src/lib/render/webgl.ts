@@ -17,6 +17,8 @@
  */
 import type { Viewport } from '@kirily/contract/geometry'
 import type { ColourField } from '@kirily/image-core/field'
+import type { Placement } from '@kirily/image-core/placement'
+import { DEFAULT_PLACEMENT } from '@kirily/image-core/placement'
 
 export type Size = { readonly width: number; readonly height: number }
 
@@ -37,6 +39,8 @@ export type Scene = {
    * that only panned would put the cost straight back.
    */
   readonly maskVersion: number
+  /** Where the cut-out has been moved to, in image pixels. */
+  readonly placement: Placement
 }
 
 export type Renderer = {
@@ -46,6 +50,9 @@ export type Renderer = {
 
 /** Past this zoom the user is inspecting pixels, so they are shown as squares. */
 const NEAREST_ABOVE = 1.5
+
+/** Named so a scene that forgets it still draws the picture unmoved. */
+export const UNPLACED = DEFAULT_PLACEMENT
 
 const VERTEX = `#version 300 es
 // One triangle covering the viewport: no buffers, no attributes, three
@@ -69,6 +76,11 @@ uniform float uCell;
 uniform float uScale;
 uniform vec2 uOffset;
 uniform bool uCorrect;
+// The cut-out's own placement: offset in image pixels, then zoom about the
+// image's centre. Undone before anything is read, exactly as the CPU path
+// does it, or the two draw different pictures.
+uniform vec2 uPlace;
+uniform float uPlaceScale;
 
 out vec4 fragColor;
 
@@ -76,7 +88,15 @@ void main() {
   // gl_FragCoord is centred and origin bottom-left; the rest of Kirily counts
   // rows from the top, so flip here and nowhere else.
   vec2 screen = vec2(gl_FragCoord.x, uTarget.y - gl_FragCoord.y);
-  vec2 at = (screen - uOffset) / uScale;
+  vec2 view = (screen - uOffset) / uScale;
+
+  // Named middle, not half: half is a reserved word in GLSL ES and a shader
+  // using it does not compile. (No backticks in here either — this source is
+  // a JavaScript template literal.)
+  vec2 middle = uImage * 0.5;
+  vec2 at = uPlaceScale == 1.0
+    ? view - uPlace
+    : middle + (view - uPlace - middle) / uPlaceScale;
 
   if (at.x < 0.0 || at.y < 0.0 || at.x >= uImage.x || at.y >= uImage.y) {
     fragColor = vec4(0.0);
@@ -145,10 +165,31 @@ const makeTexture = (gl: WebGL2RenderingContext): WebGLTexture | null => {
 }
 
 /**
+ * Whether the program builds, asked on a canvas nobody is using.
+ *
+ * A canvas hands out one kind of context for its lifetime, so taking `webgl2`
+ * from the real one and *then* finding the shader does not compile leaves it
+ * unable to fall back to `2d` — it is stuck as a WebGL canvas that draws
+ * nothing. That is exactly what happened when a reserved word reached the
+ * fragment source, and the degradation ADR-0016 promised turned out not to
+ * exist. Asking a scratch canvas first is what makes it real.
+ */
+const programBuilds = (): boolean => {
+  const probe = document.createElement('canvas').getContext('webgl2')
+  if (probe === null) return false
+  const program = link(probe)
+  if (program === null) return false
+  probe.deleteProgram(program)
+  return true
+}
+
+/**
  * Returns null when WebGL2 is missing or the program will not build. The
  * caller falls back; it does not fail.
  */
 export const createWebglRenderer = (canvas: HTMLCanvasElement): Renderer | null => {
+  if (!programBuilds()) return null
+
   const gl = canvas.getContext('webgl2', {
     // The canvas is read back by the export tests and composited over a
     // checkerboard, both of which expect straight alpha — the same thing
@@ -182,6 +223,8 @@ export const createWebglRenderer = (canvas: HTMLCanvasElement): Renderer | null 
     scale: at('uScale'),
     offset: at('uOffset'),
     correct: at('uCorrect'),
+    place: at('uPlace'),
+    placeScale: at('uPlaceScale'),
   }
 
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
@@ -298,6 +341,9 @@ export const createWebglRenderer = (canvas: HTMLCanvasElement): Renderer | null 
       gl.uniform1f(uniforms.scale, scene.viewport.scale === 0 ? 1 : scene.viewport.scale)
       gl.uniform2f(uniforms.offset, scene.viewport.offsetX, scene.viewport.offsetY)
       gl.uniform1i(uniforms.correct, field === null ? 0 : 1)
+      const placement = scene.placement
+      gl.uniform2f(uniforms.place, placement.offsetX, placement.offsetY)
+      gl.uniform1f(uniforms.placeScale, placement.scale === 0 ? 1 : placement.scale)
 
       gl.clearColor(0, 0, 0, 0)
       gl.clear(gl.COLOR_BUFFER_BIT)

@@ -13,6 +13,7 @@
   import type { ImagePoint, ScreenPoint, Viewport } from '@kirily/contract/geometry'
   import { screenPoint, toImagePoint } from '@kirily/contract/geometry'
   import type { ColourField } from '@kirily/image-core/field'
+  import type { Placement } from '@kirily/image-core/placement'
   import type { ColorSource } from '@kirily/image-core/viewport'
   import { renderViewport } from '@kirily/image-core/viewport'
   import type { Renderer } from '$lib/render/webgl.ts'
@@ -29,6 +30,8 @@
     version: number
     /** The old background, once the AI has measured it. Null disables the correction. */
     background: ColourField | null
+    /** Where the cut-out has been moved to, in image pixels. */
+    placement: Placement
     viewport: Viewport
     painting: boolean
     /** True when a single click fills a region instead of painting a stroke. */
@@ -38,6 +41,11 @@
     onfill: (at: ImagePoint) => void
     onzoom: (anchor: ScreenPoint, scale: number) => void
     onpan: (dx: number, dy: number) => void
+    /**
+     * A drag meant for a layer rather than the view, already divided by the
+     * zoom so it arrives in image pixels. Null when no layer is being moved.
+     */
+    ondragging: ((dx: number, dy: number) => void) | null
     onresize: (size: { width: number; height: number }) => void
     /** How long one composite took. A single frame says nothing; a second of them says plenty. */
     onrendered: (ms: number) => void
@@ -72,6 +80,7 @@
     mask,
     version,
     background,
+    placement,
     viewport,
     painting,
     filling,
@@ -80,6 +89,7 @@
     onfill,
     onzoom,
     onpan,
+    ondragging,
     onresize,
     onrendered,
     forceCanvas = false,
@@ -99,6 +109,8 @@
   /** Pointer id → last position, so two fingers can pinch. */
   const touches = new Map<number, { x: number; y: number }>()
   let pinchDistance = 0
+  /** Where the two fingers were centred, so a pinch can also drag. */
+  let pinchCentre: { x: number; y: number } | null = null
 
   /** Reused across frames: at 1200x800 this is 3.8 MB. */
   let framebuffer: ImageData | null = null
@@ -130,7 +142,10 @@
 
     const started = performance.now()
     if (gpu !== null) {
-      gpu.render({ color: source, mask, image, viewport, background, maskVersion: version }, size)
+      gpu.render(
+        { color: source, mask, image, viewport, background, maskVersion: version, placement },
+        size,
+      )
       onrendered(performance.now() - started)
       return
     }
@@ -145,7 +160,7 @@
     ) {
       framebuffer = new ImageData(size.width, size.height)
     }
-    renderViewport(source, mask, image, viewport, size, framebuffer.data, background)
+    renderViewport(source, mask, image, viewport, size, framebuffer.data, background, placement)
     context.putImageData(framebuffer, 0, 0)
     onrendered(performance.now() - started)
   }
@@ -156,6 +171,7 @@
     // Re-read each input so the effect runs when any of them changes.
     void version
     void background
+    void placement
     void viewport
     void size
     void image
@@ -202,6 +218,7 @@
       stroke = []
       strokePointer = null
       pinchDistance = spread()
+      pinchCentre = centre()
       return
     }
 
@@ -235,6 +252,13 @@
     return Math.hypot(a.x - b.x, a.y - b.y)
   }
 
+  /** The two fingers' centre, in page coordinates. */
+  const centre = (): { x: number; y: number } | null => {
+    const [a, b] = [...touches.values()]
+    if (a === undefined || b === undefined) return null
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+  }
+
   const midpoint = (): ScreenPoint | null => {
     const [a, b] = [...touches.values()]
     if (a === undefined || b === undefined) return null
@@ -252,13 +276,29 @@
       if (pinchDistance > 0 && next > 0 && anchor !== null) {
         onzoom(anchor, viewport.scale * (next / pinchDistance))
       }
+      // Two fingers moving together is a drag, not a pinch of ratio 1. Without
+      // this there is no way to move the picture on a touch screen at all.
+      const moved = centre()
+      if (pinchCentre !== null && moved !== null) {
+        onpan(moved.x - pinchCentre.x, moved.y - pinchCentre.y)
+      }
+      pinchCentre = moved
       pinchDistance = next
       return
     }
 
     if (panPointer === event.pointerId && lastPan !== null) {
-      onpan(event.clientX - lastPan.x, event.clientY - lastPan.y)
+      const dx = event.clientX - lastPan.x
+      const dy = event.clientY - lastPan.y
       lastPan = { x: event.clientX, y: event.clientY }
+      if (ondragging === null) {
+        onpan(dx, dy)
+      } else {
+        // Divided by the zoom here, so a drag moves the layer the same
+        // distance on screen whatever the view is doing.
+        const scale = viewport.scale === 0 ? 1 : viewport.scale
+        ondragging(dx / scale, dy / scale)
+      }
       return
     }
 
@@ -269,7 +309,10 @@
 
   const endGesture = (event: PointerEvent): void => {
     touches.delete(event.pointerId)
-    if (touches.size < 2) pinchDistance = 0
+    if (touches.size < 2) {
+      pinchDistance = 0
+      pinchCentre = null
+    }
 
     if (panPointer === event.pointerId) {
       panPointer = null
@@ -284,7 +327,17 @@
   }
 
   const cursor = $derived(
-    filling ? 'cell' : painting ? 'crosshair' : panPointer === null ? 'grab' : 'grabbing',
+    filling
+      ? 'cell'
+      : painting
+        ? 'crosshair'
+        : ondragging !== null
+          ? panPointer === null
+            ? 'move'
+            : 'grabbing'
+          : panPointer === null
+            ? 'grab'
+            : 'grabbing',
   )
 </script>
 

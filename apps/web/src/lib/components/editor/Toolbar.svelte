@@ -59,11 +59,19 @@
   }: Props = $props()
 
   const tools = [
+    // First, because it is the one that gets in nobody's way and the only
+    // way to move the image on a trackpad or a phone.
+    // "手のひら", not "動かす": the other two also move something, and three
+    // tools whose names all contain the same verb is a choice the user has to
+    // read twice.
+    { id: EditorTool.Pan, icon: '🖐', label: '手のひら' },
     { id: EditorTool.BrushRemove, icon: '🧹', label: '消す' },
     { id: EditorTool.BrushKeep, icon: '🖌', label: '残す' },
     { id: EditorTool.BucketRemove, icon: '🪣', label: 'まとめて消す' },
     { id: EditorTool.BucketKeep, icon: '🫗', label: 'まとめて残す' },
     { id: EditorTool.Crop, icon: '✂️', label: 'トリミング' },
+    { id: EditorTool.MoveSubject, icon: '🧍', label: '被写体を動かす' },
+    { id: EditorTool.MoveBackdrop, icon: '🏞', label: '背景を動かす' },
   ] as const
 
   const usingBucket = $derived(tool === EditorTool.BucketKeep || tool === EditorTool.BucketRemove)

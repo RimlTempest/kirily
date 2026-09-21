@@ -202,3 +202,41 @@ describe('renderViewport with a background field', () => {
     expect([out[0], out[1], out[2], out[3]]).toEqual([128, 128, 128, 255])
   })
 })
+
+describe('renderViewport with the cut-out moved', () => {
+  const image = { width: 4, height: 1 }
+  const viewport = { scale: 1, offsetX: 0, offsetY: 0 }
+  /** One opaque pixel at x = 1, nothing anywhere else. */
+  const colour = {
+    width: 4,
+    height: 1,
+    rgba: new Uint8ClampedArray([0, 0, 0, 255, 200, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255]),
+  }
+  const mask = new Uint8Array([0, 255, 0, 0])
+
+  test('leaves it where it was by default', () => {
+    const out = renderViewport(colour, mask, image, viewport, image)
+    expect(out[3]).toBe(0)
+    expect(out[7]).toBe(255)
+  })
+
+  test('moving it right reads it at the new place', () => {
+    const out = renderViewport(colour, mask, image, viewport, image, undefined, null, {
+      offsetX: 2,
+      offsetY: 0,
+      scale: 1,
+    })
+    expect(out[7]).toBe(0)
+    expect(out[15]).toBe(255)
+    expect(out[12]).toBe(200)
+  })
+
+  test('what moves off the frame is transparent, not wrapped', () => {
+    const out = renderViewport(colour, mask, image, viewport, image, undefined, null, {
+      offsetX: 10,
+      offsetY: 0,
+      scale: 1,
+    })
+    for (let i = 3; i < out.length; i += 4) expect(out[i]).toBe(0)
+  })
+})

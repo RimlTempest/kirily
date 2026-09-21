@@ -45,6 +45,8 @@ import type { ExportFormat } from './export.ts'
 import { canCopy, writeImage } from './clipboard.ts'
 import { downloadBlob, exportImage, extensionFor } from './export.ts'
 import type { Backdrop as BackdropImage } from '@kirily/image-core/backdrop'
+import type { Placement } from '@kirily/image-core/placement'
+import { DEFAULT_PLACEMENT, moveBy, zoomBy } from '@kirily/image-core/placement'
 import type { Backdrop, ExportSettings } from './export-settings.ts'
 import {
   Backdrop as Backdrops,
@@ -117,6 +119,15 @@ export const createEditorStore = (
   let backdropImage = $state.raw<BackdropImage | null>(null)
 
   /**
+   * Where the two movable layers sit.
+   *
+   * Views, like the crop and the edge: applied when something is drawn or
+   * written, never folded into the mask, so undo stays about the mask.
+   */
+  let subjectPlacement = $state.raw<Placement>(DEFAULT_PLACEMENT)
+  let backdropPlacement = $state.raw<Placement>(DEFAULT_PLACEMENT)
+
+  /**
    * Where the time went, for the run the user is looking at.
    *
    * "The AI is slow" and "the encoder is slow" need opposite work and look
@@ -175,6 +186,8 @@ export const createEditorStore = (
       quality: exportSettings.quality,
       background: exportSettings.background,
       backdrop: behind === Backdrops.Image ? backdropImage : null,
+      backdropPlacement,
+      subjectPlacement,
       flatten: behind === Backdrops.Colour,
       rect: exportRect(editor),
     }
@@ -260,6 +273,32 @@ export const createEditorStore = (
     },
     get backdropImage(): BackdropImage | null {
       return backdropImage
+    },
+
+    get subjectPlacement(): Placement {
+      return subjectPlacement
+    },
+    get backdropPlacement(): Placement {
+      return backdropPlacement
+    },
+    /** `dx`/`dy` are image pixels, so a drag has to divide by the zoom first. */
+    moveSubject(dx: number, dy: number): void {
+      subjectPlacement = moveBy(subjectPlacement, dx, dy)
+    },
+    moveBackdrop(dx: number, dy: number): void {
+      backdropPlacement = moveBy(backdropPlacement, dx, dy)
+    },
+    zoomSubject(factor: number, atX: number, atY: number): void {
+      if (decoded === null) return
+      subjectPlacement = zoomBy(subjectPlacement, factor, atX, atY, decoded.source)
+    },
+    zoomBackdrop(factor: number, atX: number, atY: number): void {
+      if (decoded === null) return
+      backdropPlacement = zoomBy(backdropPlacement, factor, atX, atY, decoded.source)
+    },
+    resetPlacements(): void {
+      subjectPlacement = DEFAULT_PLACEMENT
+      backdropPlacement = DEFAULT_PLACEMENT
     },
     /** Decodes a picture to put behind, and switches to it. */
     chooseBackdrop: async (file: File): Promise<void> => {
@@ -474,6 +513,8 @@ export const createEditorStore = (
       fullMask = new Uint8Array(0)
       backgroundField = null
       backdropImage = null
+      subjectPlacement = DEFAULT_PLACEMENT
+      backdropPlacement = DEFAULT_PLACEMENT
     },
 
     get lastError(): KirilyError | null {

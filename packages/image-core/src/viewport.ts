@@ -16,6 +16,8 @@ import type { Viewport } from '@kirily/contract/geometry'
 import { unmix } from './decontaminate.ts'
 import type { ColourField } from './field.ts'
 import { sampleField } from './field.ts'
+import type { Placement } from './placement.ts'
+import { DEFAULT_PLACEMENT, isPlaced, placedSample } from './placement.ts'
 
 export type Size = { readonly width: number; readonly height: number }
 
@@ -49,6 +51,8 @@ export const renderViewport = (
    * which is the worst possible time to find out.
    */
   background: ColourField | null = null,
+  /** Where the cut-out has been moved to, in image pixels. */
+  placement: Placement = DEFAULT_PLACEMENT,
 ): Uint8ClampedArray => {
   if (color.rgba.length !== color.width * color.height * 4) return out
   if (mask.length !== image.width * image.height) return out
@@ -60,16 +64,24 @@ export const renderViewport = (
   const colorScaleY = color.height / image.height
   const nearest = viewport.scale >= NEAREST_ABOVE
   const scale = viewport.scale === 0 ? 1 : viewport.scale
+  const placed = isPlaced(placement)
 
   for (let y = 0; y < target.height; y++) {
     const imageY = (y + 0.5 - viewport.offsetY) / scale
     const rowOut = y * target.width * 4
 
     for (let x = 0; x < target.width; x++) {
-      const imageX = (x + 0.5 - viewport.offsetX) / scale
+      const viewX = (x + 0.5 - viewport.offsetX) / scale
       const at = rowOut + x * 4
 
-      if (imageX < 0 || imageY < 0 || imageX >= image.width || imageY >= image.height) {
+      // The placement is undone before anything is read, so everything below
+      // — colour, mask, and the decontamination field — stays in the
+      // cut-out's own coordinates.
+      const moved = placed ? placedSample(placement, viewX, imageY, image) : null
+      const imageX = moved === null ? viewX : moved.x
+      const sampleY = moved === null ? imageY : moved.y
+
+      if (imageX < 0 || sampleY < 0 || imageX >= image.width || sampleY >= image.height) {
         out[at] = 0
         out[at + 1] = 0
         out[at + 2] = 0
@@ -78,7 +90,7 @@ export const renderViewport = (
       }
 
       const cx = imageX * colorScaleX
-      const cy = imageY * colorScaleY
+      const cy = sampleY * colorScaleY
 
       if (nearest) {
         const sx = Math.min(color.width - 1, Math.floor(cx))
@@ -87,14 +99,14 @@ export const renderViewport = (
         out[at] = color.rgba[from] ?? 0
         out[at + 1] = color.rgba[from + 1] ?? 0
         out[at + 2] = color.rgba[from + 2] ?? 0
-        out[at + 3] = sampleMaskNearest(mask, image, imageX, imageY)
-        if (background !== null) correct(out, at, background, imageX, imageY)
+        out[at + 3] = sampleMaskNearest(mask, image, imageX, sampleY)
+        if (background !== null) correct(out, at, background, imageX, sampleY)
         continue
       }
 
       sampleColorBilinear(color, cx, cy, out, at)
-      out[at + 3] = sampleMaskBilinear(mask, image, imageX, imageY)
-      if (background !== null) correct(out, at, background, imageX, imageY)
+      out[at + 3] = sampleMaskBilinear(mask, image, imageX, sampleY)
+      if (background !== null) correct(out, at, background, imageX, sampleY)
     }
   }
 

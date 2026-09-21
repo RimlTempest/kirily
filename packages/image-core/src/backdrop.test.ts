@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import type { Backdrop } from './backdrop.ts'
 import { compositeBackdrop, coverTransform } from './backdrop.ts'
 
 describe('coverTransform', () => {
@@ -118,5 +119,44 @@ describe('compositeBackdrop', () => {
       { width: 4, height: 4 },
     )
     expect(target[1]).toBe(255)
+  })
+})
+
+describe('compositeBackdrop with the backdrop moved', () => {
+  const size = { width: 4, height: 4 }
+  /** Left half red, right half green. */
+  const halves = (): Backdrop => {
+    const rgba = solid(4, 4, [255, 0, 0])
+    for (let y = 0; y < 4; y += 1) {
+      for (let x = 2; x < 4; x += 1) {
+        rgba[(y * 4 + x) * 4] = 0
+        rgba[(y * 4 + x) * 4 + 1] = 255
+      }
+    }
+    return { rgba, width: 4, height: 4 }
+  }
+
+  test('shows the other half once it has been dragged across', () => {
+    const target = solid(4, 4, [0, 0, 0], 0)
+    compositeBackdrop(target, size, halves(), { x: 0, y: 0 }, size, {
+      offsetX: 2,
+      offsetY: 0,
+      scale: 1,
+    })
+    // The backdrop moved right by two, so its left edge now reads at x = 2.
+    expect(target[0]).toBe(255)
+    expect(target[(2 * 4 + 0) * 4]).toBe(255)
+  })
+
+  test('a move of zero and a scale of one is the framing it had', () => {
+    const moved = solid(4, 4, [0, 0, 0], 0)
+    const still = solid(4, 4, [0, 0, 0], 0)
+    compositeBackdrop(moved, size, halves(), { x: 0, y: 0 }, size, {
+      offsetX: 0,
+      offsetY: 0,
+      scale: 1,
+    })
+    compositeBackdrop(still, size, halves(), { x: 0, y: 0 }, size)
+    expect([...moved]).toEqual([...still])
   })
 })

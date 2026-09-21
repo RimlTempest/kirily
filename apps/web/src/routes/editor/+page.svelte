@@ -65,16 +65,28 @@
     }
   })
 
-  /** Where the image sits inside the canvas, for the backdrop to cover. */
+  /**
+   * Where the backdrop sits inside the canvas.
+   *
+   * The image's rectangle under the viewport, then the backdrop's own
+   * placement on top — the same two steps `compositeBackdrop` takes, so what
+   * is on screen is where the file will have it.
+   */
   const imageFrame = $derived.by(() => {
     if (store.image === null) return null
     const { width, height } = store.image.source
     const view = store.viewport
+    const place = store.backdropPlacement
+
+    // Placement is in image pixels; the view scales it to the screen.
+    const scale = view.scale * place.scale
+    const centreX = width / 2
+    const centreY = height / 2
     return {
-      x: view.offsetX,
-      y: view.offsetY,
-      width: width * view.scale,
-      height: height * view.scale,
+      x: view.offsetX + (place.offsetX + centreX - centreX * place.scale) * view.scale,
+      y: view.offsetY + (place.offsetY + centreY - centreY * place.scale) * view.scale,
+      width: width * scale,
+      height: height * scale,
     }
   })
 
@@ -126,6 +138,16 @@
   }
   const modelLabel = $derived(MODEL_LABELS[store.providerId] ?? '')
   const painting = $derived(tool === EditorTool.BrushKeep || tool === EditorTool.BrushRemove)
+
+  /** Which layer a drag moves, or null when a drag moves the view. */
+  const dragging = $derived.by(() => {
+    if (tool === EditorTool.MoveSubject)
+      return (dx: number, dy: number) => store.moveSubject(dx, dy)
+    if (tool === EditorTool.MoveBackdrop) {
+      return (dx: number, dy: number) => store.moveBackdrop(dx, dy)
+    }
+    return null
+  })
   const filling = $derived(isBucket(tool))
   const cropping = $derived(tool === EditorTool.Crop)
 
@@ -170,11 +192,19 @@
   const centre = (): ScreenPoint => screenPoint(canvasSize.width / 2, canvasSize.height / 2)
 
   const onResize = (size: { width: number; height: number }): void => {
-    const first = canvasSize.width === 0
+    const previous = canvasSize
     canvasSize = size
     // The starting view shows the whole image; later resizes must not yank
     // the user's zoom away from them.
-    if (first) store.fit(size)
+    if (previous.width === 0) {
+      store.fit(size)
+      return
+    }
+    // Keeping the zoom is not the same as keeping the view. Growing the canvas
+    // without moving the offset leaves the picture pinned to the top left, and
+    // the canvas does now change size while an image is open — a panel
+    // appearing when the mask arrives is enough to do it.
+    store.pan((size.width - previous.width) / 2, (size.height - previous.height) / 2)
   }
 
   const onKeydown = (event: KeyboardEvent): void => {
@@ -241,6 +271,8 @@
           mask={store.mask}
           version={store.maskVersion}
           background={store.background}
+          placement={store.subjectPlacement}
+          ondragging={dragging}
           onrendered={(ms) => store.recordRender(ms)}
           backdrop={exportBackdrop}
           {backdropUrl}
@@ -277,7 +309,7 @@
         </div>
       </section>
 
-      <div class="md:w-56">
+      <div class="md:w-56 md:overflow-y-auto">
         <Toolbar
           {tool}
           brushSize={store.state.brush.size}
