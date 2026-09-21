@@ -93,7 +93,9 @@ export const U2NETP: ModelSpec = {
 
 /**
  * IS-Net (general use) — the architecture RMBG-1.4 is built on, under a
- * licence that permits commercial use. 170 MiB at 1024².
+ * licence that permits commercial use. 84 MiB at 1024², from the fp16 export:
+ * this tier only runs on WebGPU, where half precision is native, and the
+ * evaluation set scores the same to three decimals either way (ADR-0014).
  *
  * It exists in the chain because BiRefNet does not run everywhere: BiRefNet's
  * decoder contains a Split that needs 11 storage buffers in one shader stage,
@@ -113,8 +115,8 @@ export const ISNET_GENERAL: ModelSpec = {
   rescaleOutput: true,
   solidifyInterior: true,
   provenance: {
-    source: 'https://github.com/danielgatis/rembg (weights: xuebinqin/DIS)',
-    license: 'Apache-2.0',
+    source: 'https://huggingface.co/imgly/isnet-general-onnx (weights: xuebinqin/DIS)',
+    license: 'MIT',
   },
 }
 

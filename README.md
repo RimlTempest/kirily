@@ -18,7 +18,7 @@ mise install
 bun install          # svelte-kit sync まで走ります
 bunx lefthook install
 bun run wasm:build   # Rust → packages/wasm/pkg（git 管理外）
-bun run models:fetch # AI モデルを取得（約 284 MiB、git 管理外）
+bun run models:fetch # AI モデルを取得（約 198 MiB、git 管理外）
 bun run dev          # http://localhost:5173
 ```
 
@@ -52,11 +52,11 @@ bun audit            # 依存の既知の脆弱性
 
 端末の能力に応じて 3 段から選びます（[ADR-0007](docs/adr/0007-segmentation-model.md)）。
 
-| 段  | モデル               | ライセンス | 入力  | サイズ  | 条件                             |
-| --- | -------------------- | ---------- | ----- | ------- | -------------------------------- |
-| 1   | BiRefNet-lite (fp16) | MIT        | 1024² | 109 MiB | WebGPU（storage buffer 11 以上） |
-| 2   | IS-Net general-use   | Apache-2.0 | 1024² | 170 MiB | WebGPU                           |
-| 3   | U²-Netp              | Apache-2.0 | 320²  | 4.4 MiB | 常時（WASM）                     |
+| 段  | モデル                    | ライセンス | 入力  | サイズ  | 条件                             |
+| --- | ------------------------- | ---------- | ----- | ------- | -------------------------------- |
+| 1   | BiRefNet-lite (fp16)      | MIT        | 1024² | 109 MiB | WebGPU（storage buffer 11 以上） |
+| 2   | IS-Net general-use (fp16) | MIT        | 1024² | 84 MiB  | WebGPU                           |
+| 3   | U²-Netp                   | Apache-2.0 | 320²  | 4.4 MiB | 常時（WASM）                     |
 
 **提示する前に端末の能力を見ます。** BiRefNet は Apple GPU では動かず
 （デコーダの `Split` が storage buffer を 11 個要求し、上限は 10）、

@@ -27,14 +27,16 @@ type ModelSource = {
 }
 
 /**
- * Both entries are pinned by size and hash. A model that silently changes
- * upstream would change Kirily's output without any code changing, which is
- * the hardest kind of regression to explain.
+ * Every entry is pinned three ways: the URL names a commit rather than a
+ * branch, and the bytes are checked against a size and a SHA-256. A model that
+ * silently changed upstream would change Kirily's output with no code change,
+ * which is the hardest kind of regression to explain — and `resolve/main` is a
+ * moving reference in exactly the way a git tag is (ADR-0009).
  */
 const MODELS: readonly ModelSource[] = [
   {
     id: 'birefnet-lite',
-    url: 'https://huggingface.co/onnx-community/BiRefNet_lite-ONNX/resolve/main/onnx/model_fp16.onnx',
+    url: 'https://huggingface.co/onnx-community/BiRefNet_lite-ONNX/resolve/de15b22ba131738a16dff04aab8bdf8dc32e3ac1/onnx/model_fp16.onnx',
     bytes: 114_538_221,
     sha256: 'd39b897ceb16ae654c1731f3dba0cf9b368d9cae74b5a57459b455cc8bfec402',
     license: 'MIT',
@@ -42,11 +44,15 @@ const MODELS: readonly ModelSource[] = [
   },
   {
     id: 'isnet-general-use',
-    url: 'https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx',
-    bytes: 178_648_008,
-    sha256: '60920e99c45464f2ba57bee2ad08c919a52bbf852739e96947fbb4358c0d964a',
-    license: 'Apache-2.0',
-    credit: 'xuebinqin/DIS, distributed by danielgatis/rembg',
+    // The fp16 export, 84 MiB against the original's 170. This tier only ever
+    // runs on WebGPU (`plan.ts`), which is where half precision is native, so
+    // the download is halved for nothing given up — verified against the fp32
+    // weights on the evaluation set before the swap (ADR-0014).
+    url: 'https://huggingface.co/imgly/isnet-general-onnx/resolve/440dea96dd4a3b06bbbf5abec3e26569dd7ec49f/onnx/model_fp16.onnx',
+    bytes: 88_152_708,
+    sha256: '2eb4b5dda7ec41c617e59706e5aafa1f978c9a5f983d2518d9f0ae4d6eb04f20',
+    license: 'MIT',
+    credit: 'xuebinqin/DIS, fp16 ONNX export by IMG.LY',
   },
   {
     id: 'u2netp',
