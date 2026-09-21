@@ -1,0 +1,20 @@
+# Kirily's own header rules. The adapter appends SvelteKit's generated ones for
+# /_app/*, which are content-hashed and therefore safely immutable.
+#
+# Nothing here is applied by `vite preview`, so this file is only exercised
+# once deployed. Keep it short enough to read.
+
+/models/*
+  # The weights are 198 MiB and the tier that needs them downloads all of it.
+  # `no-cache` is revalidate-then-reuse, not "do not store": a repeat visit
+  # sends a conditional request per shard and gets 304s, which measured 208ms
+  # against 715ms cold.
+  #
+  # Not `immutable`, deliberately. A model file keeps its name when the model
+  # behind it is replaced (ADR-0017), so an immutable copy would be served for
+  # a year — and the SHA-256 in the manifest would then not match, so the tier
+  # would refuse to run. Safe, and broken. Hashing the path is what would make
+  # `immutable` honest, and that is its own change.
+  Cache-Control: no-cache
+  # Somebody else's weights, republished under their licence.
+  X-Robots-Tag: noindex
