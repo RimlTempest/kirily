@@ -16,6 +16,14 @@
     "binding": "ASSETS",
   },
 
+  // Cloudflare creates the DNS record and manages the certificate. Declared
+  // here rather than clicked in the dashboard, so the domain this answers on
+  // is part of the repository and a change to it shows up in a diff.
+  //
+  // `workers.dev` stays on as well, because it is the address that keeps
+  // working while DNS or a certificate is still settling.
+  "routes": [{ "pattern": "kirily.riml4i.com", "custom_domain": true }],
+
   // R2 / KV / D1 bindings are deliberately absent. The MVP processes images in
   // the browser and stores nothing (kirily-design.md §22, §43). Adding a
   // binding here means the privacy promise on the landing page has to change

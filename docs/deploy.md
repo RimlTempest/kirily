@@ -78,6 +78,23 @@ R2 / KV / D1 が**無いこと**自体が設計であり、CI が検査してい
 足すということは画像をサーバーに置くということで、
 そのときはトップページの約束も書き換わる。
 
+## ドメイン
+
+`kirily.riml4i.com` は `wrangler.jsonc` の `routes` に宣言してある
+（`custom_domain: true`）。DNS のレコードも証明書も Cloudflare が作る。
+
+ダッシュボードで足さずに設定に書くのは、**このサイトがどこで応答するかを
+リポジトリの一部にする**ため。ダッシュボードで足したものは diff に出ない。
+
+`workers.dev` は残してある。DNS や証明書が落ち着くまでの間、
+動き続ける住所があったほうがよい。
+
+条件は 2 つで、どちらも満たしている。
+
+- ゾーンが Cloudflare にあること（`riml4i.com` のネームサーバーは
+  `lina/newt.ns.cloudflare.com`）
+- そのホスト名に CNAME が無いこと（`kirily.riml4i.com` は未使用だった）
+
 ## ヘッダ
 
 `apps/web/_headers` が `/models/*` に `Cache-Control: no-cache` を付ける。
