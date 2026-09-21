@@ -17,6 +17,7 @@ import type { Result } from '@kirily/contract/result'
 import { assertNever, ok } from '@kirily/contract/result'
 import type { Bounds } from '@kirily/image-core/flood'
 import { floodSelect } from '@kirily/image-core/flood'
+import { refineSelection } from '@kirily/image-core/select'
 import { layerFor, stampBrush } from '@kirily/image-core/mask'
 
 /**
@@ -54,6 +55,12 @@ export type BucketFillCommand = {
    * preview, so a click at 25% zoom picks the same region as at 100%.
    */
   readonly rgba: Uint8ClampedArray
+  /**
+   * The AI's alpha, when it has run. The fill uses it to stay on the side of
+   * the subject's edge the click landed on, which is the only thing that
+   * separates a white collar from a white page.
+   */
+  readonly guide: Uint8Array | null
 }
 
 export type SetCropCommand = {
@@ -149,7 +156,20 @@ export const prepareCommand = (command: EditorCommand, layers: MaskLayers): Prep
 
   const selection = new Uint8Array(layers.width * layers.height)
   const bounds: Bounds = { x: 0, y: 0, width: 0, height: 0 }
-  floodSelect(command.rgba, layers, command.at, command.settings, selection, bounds)
+  floodSelect(
+    command.rgba,
+    layers,
+    command.at,
+    command.settings,
+    selection,
+    bounds,
+    command.guide ?? undefined,
+  )
+
+  // A flood decides reachability pixel by pixel, so its frontier is a
+  // stair-step. A selection is a mask, and masks here take their edge from the
+  // image (ADR-0019).
+  refineSelection(command.rgba, selection, layers)
 
   const layer = layerFor(layers, command.mode)
   const rect = bounds.width > 0 && bounds.height > 0 ? bounds : null

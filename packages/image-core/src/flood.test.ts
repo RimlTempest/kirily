@@ -84,6 +84,7 @@ describe('floodSelect', () => {
         tolerance: 0.05,
         feather: 0.6,
         contiguous: true,
+        guided: false,
       },
     )
 
@@ -118,6 +119,7 @@ describe('floodSelect', () => {
         tolerance: 0,
         feather: 0,
         contiguous: true,
+        guided: false,
       },
     )
     expect(at(selection, 5, 5)).toBe(255)
@@ -193,5 +195,95 @@ describe('the default settings, against the case they were measured on', () => {
   test('leaves the subject alone even though it is only barely different', () => {
     const selection = floodSelect(almostUniform(), size, { x: 0, y: 0 }, DEFAULT_BUCKET)
     expect(at(selection, 8, 8)).toBe(0)
+  })
+})
+
+/** Eight pixels of one colour: the case a colour fill cannot divide. */
+const sameColour = (): Uint8ClampedArray => {
+  const rgba = new Uint8ClampedArray(8 * 4)
+  for (let i = 0; i < 8; i += 1) {
+    rgba[i * 4] = 250
+    rgba[i * 4 + 1] = 250
+    rgba[i * 4 + 2] = 249
+    rgba[i * 4 + 3] = 255
+  }
+  return rgba
+}
+
+describe('floodSelect with an AI guide', () => {
+  /**
+   * Two halves the same colour, which is the case that defeats a colour fill:
+   * a white collar against a white background. The mask is the only thing that
+   * knows where one stops.
+   */
+  const strip = { width: 8, height: 1 }
+  /** Left half background, right half subject. */
+  const guide = new Uint8Array([0, 0, 0, 0, 255, 255, 255, 255])
+  const settings = { tolerance: 0.05, feather: 0.2, contiguous: true, guided: true }
+
+  test('without a guide the fill runs straight through into the subject', () => {
+    const selection = floodSelect(
+      sameColour(),
+      strip,
+      { x: 0, y: 0 },
+      { ...settings, guided: false },
+    )
+    expect(selection[7]).toBeGreaterThan(0)
+  })
+
+  test('with a guide it stops where the subject starts', () => {
+    const selection = floodSelect(
+      sameColour(),
+      strip,
+      { x: 0, y: 0 },
+      settings,
+      undefined,
+      undefined,
+      guide,
+    )
+    expect(selection[3]).toBeGreaterThan(0)
+    expect(selection[4]).toBe(0)
+    expect(selection[7]).toBe(0)
+  })
+
+  test('seeded inside the subject it takes the subject, not the background', () => {
+    const selection = floodSelect(
+      sameColour(),
+      strip,
+      { x: 7, y: 0 },
+      settings,
+      undefined,
+      undefined,
+      guide,
+    )
+    expect(selection[7]).toBeGreaterThan(0)
+    expect(selection[4]).toBeGreaterThan(0)
+    expect(selection[3]).toBe(0)
+  })
+
+  test('a guide is ignored when the setting is off', () => {
+    const selection = floodSelect(
+      sameColour(),
+      strip,
+      { x: 0, y: 0 },
+      { ...settings, guided: false },
+      undefined,
+      undefined,
+      guide,
+    )
+    expect(selection[7]).toBeGreaterThan(0)
+  })
+
+  test('a guide of the wrong size is ignored rather than trusted', () => {
+    const selection = floodSelect(
+      sameColour(),
+      strip,
+      { x: 0, y: 0 },
+      settings,
+      undefined,
+      undefined,
+      new Uint8Array(3),
+    )
+    expect(selection[7]).toBeGreaterThan(0)
   })
 })

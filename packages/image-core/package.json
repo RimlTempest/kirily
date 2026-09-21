@@ -15,7 +15,8 @@
     "./metrics": "./src/metrics.ts",
     "./decontaminate": "./src/decontaminate.ts",
     "./field": "./src/field.ts",
-    "./matte": "./src/matte.ts"
+    "./matte": "./src/matte.ts",
+    "./select": "./src/select.ts"
   },
   "scripts": {
     "test": "bun test"

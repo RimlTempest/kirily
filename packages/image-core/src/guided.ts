@@ -188,9 +188,11 @@ const boxBlur = (
   for (let y = 0; y < height; y++) {
     const row = y * width
     let sum = 0
-    for (let x = 0; x <= Math.min(radius, width - 1); x++) sum += source[row + x] ?? 0
-    // Edges are clamped, so the leading samples repeat the first pixel.
-    sum += (source[row] ?? 0) * Math.min(radius, width)
+    // Edges are clamped: the window at x = 0 reads `radius` repeats of the
+    // first pixel, then the pixels from 0 to radius — themselves clamped,
+    // which is what a row shorter than the window needs.
+    for (let x = 0; x <= radius; x++) sum += source[row + Math.min(width - 1, x)] ?? 0
+    sum += (source[row] ?? 0) * radius
 
     for (let x = 0; x < width; x++) {
       horizontal[row + x] = sum / windowSize
@@ -203,8 +205,10 @@ const boxBlur = (
   const vertical = new Float32Array(source.length)
   for (let x = 0; x < width; x++) {
     let sum = 0
-    for (let y = 0; y <= Math.min(radius, height - 1); y++) sum += horizontal[y * width + x] ?? 0
-    sum += (horizontal[x] ?? 0) * Math.min(radius, height)
+    for (let y = 0; y <= radius; y++) {
+      sum += horizontal[Math.min(height - 1, y) * width + x] ?? 0
+    }
+    sum += (horizontal[x] ?? 0) * radius
 
     for (let y = 0; y < height; y++) {
       vertical[y * width + x] = sum / windowSize

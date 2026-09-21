@@ -182,3 +182,37 @@ describe('refineMask', () => {
     expect(Array.from(mask).every((v) => v === 100)).toBe(true)
   })
 })
+
+/**
+ * The clamped padding was short whenever a side was no longer than the window:
+ * a one-row image lost a third of its window and every value came back scaled
+ * down. Real images never get there, but a filter that changes a flat mask is
+ * wrong at any size, and the Rust mirror had it too.
+ */
+const flatAfterRefine = (width: number, height: number): Uint8Array => {
+  const rgba = new Uint8ClampedArray(width * height * 4)
+  for (let i = 0; i < width * height; i += 1) {
+    const value = (i % 7) * 30
+    rgba[i * 4] = value
+    rgba[i * 4 + 1] = value
+    rgba[i * 4 + 2] = value
+    rgba[i * 4 + 3] = 255
+  }
+  const mask = new Uint8Array(width * height).fill(255)
+  refineMask(rgba, mask, { width, height }, { ...DEFAULT_REFINE, radius: 4 })
+  return mask
+}
+
+describe('the window at an edge', () => {
+  for (const [width, height] of [
+    [1, 1],
+    [64, 1],
+    [1, 64],
+    [3, 3],
+    [64, 64],
+  ] as const) {
+    test(`leaves a flat mask flat at ${width}x${height}`, () => {
+      expect([...flatAfterRefine(width, height)].every((value) => value === 255)).toBe(true)
+    })
+  }
+})

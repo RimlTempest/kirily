@@ -32,6 +32,14 @@ export const floodSelect = (
   settings: BucketSettings,
   out: Uint8Array = new Uint8Array(size.width * size.height),
   bounds?: Bounds,
+  /**
+   * The AI's alpha, when there is one. A pixel on the other side of the
+   * subject's edge is out of reach however close its colour is, which is the
+   * only thing that separates a white collar from a white page.
+   *
+   * A guide that does not match the image is ignored rather than trusted.
+   */
+  guide?: Uint8Array,
 ): Uint8Array => {
   const { width, height } = size
   const seedX = Math.floor(seed.x)
@@ -50,7 +58,14 @@ export const floodSelect = (
   if (rgba.length !== width * height * 4 || out.length !== width * height) return empty()
   if (seedX < 0 || seedY < 0 || seedX >= width || seedY >= height) return empty()
 
-  const target = colourAt(rgba, seedY * width + seedX)
+  const seedIndex = seedY * width + seedX
+  const target = colourAt(rgba, seedIndex)
+
+  // A guide that does not describe this image says nothing about it.
+  const usable = settings.guided && guide !== undefined && guide.length === width * height
+  // Which side of the subject's edge the click landed on. Everything the fill
+  // reaches has to be on that side.
+  const seedSide = usable && (guide?.[seedIndex] ?? 0) >= 128
   // Below `inner` a pixel is fully selected; between there and `tolerance` it
   // fades out. Feather 0 collapses the two into a hard edge.
   const tolerance = Math.max(0, settings.tolerance)
@@ -78,6 +93,10 @@ export const floodSelect = (
       measured[index] = 1
     }
     if (distance > tolerance) return 0
+    // Checked after the colour, not before: the distance is memoised and the
+    // guide is a single read, so this order costs nothing and keeps the cheap
+    // rejection first.
+    if (usable && (guide?.[index] ?? 0) >= 128 !== seedSide) return 0
     if (distance <= inner || falloff <= 0) return 255
     return Math.round(255 * (1 - (distance - inner) / falloff))
   }

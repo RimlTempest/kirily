@@ -58,6 +58,18 @@ export type BucketSettings = {
   readonly feather: number
   /** False selects every matching pixel, not just the one clicked into. */
   readonly contiguous: boolean
+  /**
+   * Whether the fill may cross the AI's idea of the subject's edge.
+   *
+   * Colour alone cannot separate a white collar from a white page — measured
+   * at 0.0187 in OKLab against the background's own spread of 0.0030, which is
+   * inside any tolerance loose enough to be useful (ADR-0012). The mask knows,
+   * so the fill can ask it.
+   *
+   * Off turns the bucket back into a pure colour fill, which is what is wanted
+   * when the thing being corrected *is* the mask.
+   */
+  readonly guided: boolean
 }
 
 /**
@@ -76,4 +88,5 @@ export const DEFAULT_BUCKET: BucketSettings = {
   tolerance: 0.008,
   feather: 0.2,
   contiguous: true,
+  guided: true,
 }

@@ -12,6 +12,10 @@
     tool: EditorTool
     brushSize: number
     tolerance: number
+    /** Whether the bucket may use the AI's mask to stay on one side of the subject. */
+    guided: boolean
+    /** True once a mask exists; without one there is nothing to be guided by. */
+    hasMask: boolean
     ratio: number | null
     busy: boolean
     canUndo: boolean
@@ -19,6 +23,7 @@
     ontool: (tool: EditorTool) => void
     onbrushsize: (size: number) => void
     ontolerance: (tolerance: number) => void
+    onguided: (guided: boolean) => void
     onratio: (ratio: number | null) => void
     onauto: () => void
     onundo: () => void
@@ -29,6 +34,8 @@
     tool,
     brushSize,
     tolerance,
+    guided,
+    hasMask,
     ratio,
     busy,
     canUndo,
@@ -36,6 +43,7 @@
     ontool,
     onbrushsize,
     ontolerance,
+    onguided,
     onratio,
     onauto,
     onundo,
@@ -111,6 +119,20 @@
         oninput={(event) => ontolerance(event.currentTarget.valueAsNumber)}
       />
     </label>
+    <!-- Offered only once there is a mask: a switch that cannot do anything
+         is worse than no switch. Off is for correcting the mask itself, which
+         is the one job the mask is no help with. -->
+    {#if hasMask}
+      <label class="flex shrink-0 items-center gap-2 px-2 text-sm text-ink-muted md:px-4">
+        <input
+          type="checkbox"
+          checked={guided}
+          class="accent-[var(--color-accent)]"
+          oninput={(event) => onguided(event.currentTarget.checked)}
+        />
+        <span class="whitespace-nowrap">AI の輪郭で止める</span>
+      </label>
+    {/if}
   {:else}
     <label class="flex shrink-0 items-center gap-2 px-2 text-sm text-ink-muted md:px-4">
       <span class="whitespace-nowrap">太さ</span>

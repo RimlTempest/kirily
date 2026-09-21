@@ -150,6 +150,10 @@ export const createEditorStore = (
     get background(): ColourField | null {
       return backgroundField
     },
+    /** True once the AI has produced a mask, so the bucket has something to follow. */
+    get hasMask(): boolean {
+      return backgroundField !== null
+    },
     /** Where the time went. Empty until something has been measured. */
     get timings(): Timings {
       return timings
@@ -264,6 +268,10 @@ export const createEditorStore = (
 
       const next = dispatch(editor, {
         kind: 'bucket-fill',
+        // The AI's own layer, not the composed mask: the composed one already
+        // has the user's corrections in it, so a fill would be guided by its
+        // own earlier fills.
+        guide: editor.mask.base.length === fullMask.length ? editor.mask.base : null,
         mode,
         at,
         settings: editor.bucket,

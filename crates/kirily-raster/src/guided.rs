@@ -191,11 +191,13 @@ fn box_blur(source: &[f32], width: usize, height: usize, radius: usize) -> Vec<f
     for y in 0..height {
         let row = y * width;
         let mut sum = 0f32;
-        for x in 0..=radius.min(width - 1) {
-            sum += source[row + x];
+        // Edges are clamped: the window at x = 0 reads `radius` repeats of the
+        // first pixel, then the pixels from 0 to radius — themselves clamped,
+        // which is what a row shorter than the window needs.
+        for x in 0..=radius {
+            sum += source[row + x.min(width - 1)];
         }
-        // Edges are clamped, so the leading samples repeat the first pixel.
-        sum += source[row] * radius.min(width) as f32;
+        sum += source[row] * radius as f32;
 
         for x in 0..width {
             horizontal[row + x] = sum / window_size;
@@ -208,10 +210,10 @@ fn box_blur(source: &[f32], width: usize, height: usize, radius: usize) -> Vec<f
     let mut vertical = vec![0f32; source.len()];
     for x in 0..width {
         let mut sum = 0f32;
-        for y in 0..=radius.min(height - 1) {
-            sum += horizontal[y * width + x];
+        for y in 0..=radius {
+            sum += horizontal[y.min(height - 1) * width + x];
         }
-        sum += horizontal[x] * radius.min(height) as f32;
+        sum += horizontal[x] * radius as f32;
 
         for y in 0..height {
             vertical[y * width + x] = sum / window_size;
@@ -279,6 +281,39 @@ mod tests_support {
 
 #[cfg(test)]
 mod tests {
+    /// The clamped padding was short whenever a side was no longer than the
+    /// window, so a flat mask came back scaled down. The TypeScript mirror had
+    /// the same bug; both are fixed and both are covered.
+    #[test]
+    fn a_flat_mask_stays_flat_whatever_the_shape() {
+        for (width, height) in [(1usize, 1usize), (64, 1), (1, 64), (3, 3), (64, 64)] {
+            let mut rgba = vec![0u8; width * height * 4];
+            for i in 0..width * height {
+                let value = ((i % 7) * 30) as u8;
+                rgba[i * 4] = value;
+                rgba[i * 4 + 1] = value;
+                rgba[i * 4 + 2] = value;
+                rgba[i * 4 + 3] = 255;
+            }
+            let mut mask = vec![255u8; width * height];
+            let size = ImageSize::new(width as u32, height as u32).unwrap();
+            refine_mask(
+                &rgba,
+                &mut mask,
+                size,
+                RefineOptions {
+                    radius: 4,
+                    ..RefineOptions::default()
+                },
+            )
+            .unwrap();
+            assert!(
+                mask.iter().all(|&v| v == 255),
+                "{width}x{height} changed a flat mask"
+            );
+        }
+    }
+
     use super::tests_support::*;
     use super::*;
 

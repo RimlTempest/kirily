@@ -129,6 +129,7 @@ describe('bucket fill', () => {
 
   const fill = (x: number, y: number, mode: BrushMode = 'remove'): EditorCommand => ({
     kind: 'bucket-fill',
+    guide: null,
     mode,
     at: imagePoint(x, y),
     settings: DEFAULT_BUCKET,

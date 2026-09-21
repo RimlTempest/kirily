@@ -212,6 +212,8 @@
           {tool}
           brushSize={store.state.brush.size}
           tolerance={store.state.bucket.tolerance}
+          guided={store.state.bucket.guided}
+          hasMask={store.hasMask}
           {ratio}
           {busy}
           canUndo={store.canUndo}
@@ -225,6 +227,8 @@
           onbrushsize={(size) => store.setBrushSize(size)}
           ontolerance={(value) =>
             store.setBucket({ ...(store.state?.bucket ?? DEFAULT_BUCKET), tolerance: value })}
+          onguided={(value) =>
+            store.setBucket({ ...(store.state?.bucket ?? DEFAULT_BUCKET), guided: value })}
           onratio={(value) => (ratio = value)}
           onauto={() => void store.removeBackground()}
           onundo={() => store.undo()}
