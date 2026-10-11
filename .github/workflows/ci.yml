@@ -215,7 +215,7 @@ jobs:
       # ランナーに GPU アダプタが無いので CPU 段（U²-Netp）が走る。
       # WebGPU 段は実機で `bun run e2e:webgpu`（ADR-0007）。
       - run: bun run e2e
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: playwright-report
